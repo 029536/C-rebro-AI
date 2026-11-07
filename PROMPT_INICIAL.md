@@ -67,6 +67,17 @@ Regras de trabalho:
 - Retomar: se a gravação for interrompida (`MediaRecorder` parou, página recarregada), a reunião continua `recording`. Botão **Continuar gravação** chama `PATCH` com `action: "resume"`, que abre uma nova parte (`part_no + 1`) e segue na mesma reunião, sem alterar nada existente. Na tela da transcrição, marcador discreto "Parte 2, 10:45" no início de cada parte.
 - **Aceite:** com `PART_MINUTES=1` em teste, uma gravação de 4 minutos gera 4 partes e 3 checkpoints; interromper e continuar gera nova parte sem alterar as anteriores; testes de `buildContext` e da regra de partes.
 
+### Fase 3.5: publicar na Vercel cedo (adiantado da Fase 8)
+
+Decisão de 2026-11-07: adiantamos a parte de publicação da Fase 8 para logo após a Fase 3, para testar microfone e gravação real no celular (exige HTTPS) antes de construir copiloto, parecer, plano e projetos — assim dá para corrigir problemas de gravação/transcrição cedo, sem ter que refazer depois. A Fase 8 original fica só com PWA, acabamento e o checklist final.
+
+- Criar o repositório no GitHub (o Isaias cria a conta/repositório; o Claude Code orienta os comandos de `git remote add` e `git push`) e importar esse repositório na Vercel.
+- Cadastrar na Vercel as mesmas variáveis do `.env.local` (inclusive `CLAUDE_MODEL`, `CLAUDE_FAST_MODEL` e `ANTHROPIC_API_KEY`, mesmo ainda sem uso nesta fase) e `MOCK_AI=0` para testar transcrição de verdade.
+- Definir `maxDuration` nas rotas que já existem, conforme o plano contratado (Hobby ou Pro).
+- Configurar no Supabase (Authentication > URL Configuration) a Site URL e as Redirect URLs com o domínio da Vercel.
+- Lembrar de conferir se o plano Hobby é permitido para uso em empresa (ver restrição 7 do `CLAUDE.md`).
+- **Aceite:** login funciona em produção; gravo no celular de verdade (HTTPS de verdade, não só `localhost`), o trecho é transcrito e aparece salvo na lista de reuniões.
+
 ### Fase 4: Claude na sala (copiloto)
 
 - `lib/ai/prompts.ts` (prompts do apêndice) e `lib/ai/anthropic.ts`.
@@ -103,12 +114,14 @@ Regras de trabalho:
 - Ao criar reunião, escolher o projeto (opcional). No parecer e no plano, citar arquivos reais do projeto quando relevante.
 - **Aceite:** importo o zip de um projeto real; `.env` e `node_modules` ficam de fora e aparecem no resumo; o parecer cita arquivos que existem; reimportar não duplica; testes de filtros, detecção de segredos e `selectFiles`.
 
-### Fase 8: PWA, acabamento e Vercel
+### Fase 8: PWA e acabamento
+
+A publicação na Vercel já aconteceu na Fase 3.5; aqui só cadastramos as variáveis que faltaram (as de projetos/plano, se houver) e fazemos o acabamento final.
 
 - `manifest.ts` ("Cérebro IA", ícones, `display: standalone`) para instalar na tela inicial.
 - Tela **Configurações** para o contexto da empresa e o vocabulário.
 - Erros tratados com mensagens claras em português: microfone negado, sem rede, falha de transcrição, limite de duração da função, zip inválido ou grande demais.
-- Orientar-me a importar o repositório do GitHub na Vercel, cadastrar as variáveis (inclusive `CLAUDE_FAST_MODEL`), definir `maxDuration` conforme o plano e configurar no Supabase a URL do site e as URLs de redirecionamento. Lembrar-me de conferir se o plano Hobby da Vercel é permitido para uso em empresa.
+- Conferir na Vercel se alguma variável nova (de projetos, por exemplo) ainda falta cadastrar.
 - Checklist de fumaça em produção: login, gravar 1 minuto, comentário do Claude, parecer, plano com prompts, importar um zip pequeno, chat, excluir.
 - **Aceite:** instalo na tela inicial do iPhone e do Android; o checklist passa no celular, em produção.
 
