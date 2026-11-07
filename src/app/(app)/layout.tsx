@@ -6,7 +6,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-4">
         <span className="font-semibold text-text">Cérebro IA</span>
         <form action={signOut}>
-          <button type="submit" className="text-sm font-medium text-text-secondary">
+          <button
+            type="submit"
+            className="flex min-h-11 items-center text-sm font-medium text-text-secondary"
+          >
             Sair
           </button>
         </form>

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { MeetingActions } from "@/components/MeetingActions";
+import { formatDateTime } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function MeetingsPage() {
@@ -18,7 +20,7 @@ export default async function MeetingsPage() {
         {!inProgress && (
           <Link
             href="/nova"
-            className="flex h-13 items-center rounded-xl bg-accent px-5 text-sm font-semibold text-white"
+            className="flex h-[52px] items-center rounded-xl bg-accent px-5 text-sm font-semibold text-white"
           >
             Nova reunião
           </Link>
@@ -26,16 +28,23 @@ export default async function MeetingsPage() {
       </div>
 
       {inProgress && (
-        <Link
-          href={`/nova?meetingId=${inProgress.id}`}
-          className="flex items-center justify-between rounded-xl border border-record bg-surface p-4"
-        >
-          <div>
-            <p className="font-semibold text-text">{inProgress.title}</p>
-            <p className="text-sm text-text-secondary">Gravação interrompida</p>
+        <div className="flex flex-col gap-3 rounded-xl border border-record bg-surface p-4">
+          <Link href={`/reunioes/${inProgress.id}`} className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-text">{inProgress.title}</p>
+              <p className="text-sm text-text-secondary">Gravação interrompida</p>
+            </div>
+          </Link>
+          <div className="flex items-center justify-between">
+            <Link
+              href={`/nova?meetingId=${inProgress.id}`}
+              className="flex min-h-11 items-center font-semibold text-record"
+            >
+              Continuar gravação
+            </Link>
+            <MeetingActions meetingId={inProgress.id} showFinishWithoutRecording afterDelete="/" />
           </div>
-          <span className="font-semibold text-record">Continuar gravação</span>
-        </Link>
+        </div>
       )}
 
       {finished.length > 0 ? (
@@ -43,9 +52,15 @@ export default async function MeetingsPage() {
           {finished.map((meeting) => (
             <li
               key={meeting.id}
-              className="rounded-xl border border-border bg-surface p-4 text-text"
+              className="flex items-center justify-between gap-2 rounded-xl border border-border bg-surface p-4"
             >
-              {meeting.title}
+              <Link href={`/reunioes/${meeting.id}`} className="flex-1">
+                <p className="text-text">{meeting.title}</p>
+                <p className="text-sm text-text-secondary">
+                  {formatDateTime(meeting.started_at)}
+                </p>
+              </Link>
+              <MeetingActions meetingId={meeting.id} showFinishWithoutRecording={false} afterDelete="/" />
             </li>
           ))}
         </ul>

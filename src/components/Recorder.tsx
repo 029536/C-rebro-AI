@@ -302,7 +302,7 @@ export function Recorder({
         <button
           type="button"
           onClick={handleStart}
-          className="h-15 rounded-xl bg-accent text-base font-semibold text-white"
+          className="h-[60px] rounded-xl bg-accent text-base font-semibold text-white"
         >
           Começar a gravar
         </button>
@@ -311,7 +311,7 @@ export function Recorder({
           type="button"
           onClick={handleFinish}
           disabled={status === "finishing"}
-          className="h-15 rounded-xl bg-record text-base font-semibold text-white disabled:opacity-60"
+          className="h-[60px] rounded-xl bg-record text-base font-semibold text-white disabled:opacity-60"
         >
           {status === "finishing" ? "Encerrando..." : "Encerrar"}
         </button>

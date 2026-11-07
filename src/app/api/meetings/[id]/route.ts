@@ -48,10 +48,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
   }
 
-  // action === "finish"
+  // action === "finish" (também usado por "Encerrar sem gravar mais", numa reunião
+  // interrompida: funciona igual, sem precisar retomar a gravação antes).
   const { data: meeting, error: fetchError } = await supabase
     .from("meetings")
-    .select("started_at")
+    .select("id")
     .eq("id", id)
     .single();
 
@@ -59,17 +60,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Reunião não encontrada." }, { status: 404 });
   }
 
-  const endedAt = new Date();
-  const durationSeconds = Math.max(
-    0,
-    Math.round((endedAt.getTime() - new Date(meeting.started_at).getTime()) / 1000)
-  );
+  // Soma dos trechos, não o relógio de parede: numa reunião que ficou "interrompida"
+  // por horas antes de ser encerrada, a duração real é o áudio gravado, não o tempo
+  // corrido desde o início.
+  const { data: chunks } = await supabase
+    .from("meeting_chunks")
+    .select("audio_seconds")
+    .eq("meeting_id", id);
+  const durationSeconds = (chunks ?? []).reduce((sum, chunk) => sum + (chunk.audio_seconds ?? 0), 0);
 
   const { error: updateError } = await supabase
     .from("meetings")
     .update({
       status: "ready",
-      ended_at: endedAt.toISOString(),
+      ended_at: new Date().toISOString(),
       duration_seconds: durationSeconds,
     })
     .eq("id", id);
@@ -79,4 +83,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json({ ok: true, duration_seconds: durationSeconds });
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("meetings").delete().eq("id", id);
+  if (error) {
+    return NextResponse.json({ error: "Não foi possível excluir a reunião." }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }
