@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AUDIO_CHUNK_MAX_BYTES } from "@/lib/config";
 import { buildWhisperPrompt, transcribeAudio } from "@/lib/ai/transcribe";
+import { computeNextPartNo } from "@/lib/meetings";
 import { createClient } from "@/lib/supabase/server";
 
 // Transcrever um trecho de 3 minutos é rápido; 60s é folga de sobra mesmo no plano Hobby
@@ -11,6 +12,8 @@ export const maxDuration = 60;
 const fieldsSchema = z.object({
   idx: z.coerce.number().int().min(0),
   audioSeconds: z.coerce.number().int().min(1),
+  // Enviado só no primeiro trecho depois de "Continuar gravação" (ver action "resume").
+  forcePartNo: z.coerce.number().int().min(1).optional(),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -33,11 +36,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsedFields = fieldsSchema.safeParse({
     idx: formData.get("idx"),
     audioSeconds: formData.get("audioSeconds"),
+    forcePartNo: formData.get("forcePartNo") ?? undefined,
   });
   if (!parsedFields.success) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
-  const { idx, audioSeconds } = parsedFields.data;
+  const { idx, audioSeconds, forcePartNo } = parsedFields.data;
 
   const supabase = await createClient();
 
@@ -51,10 +55,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .maybeSingle();
 
   if (existing) {
-    return NextResponse.json({ transcript: existing.transcript, part_no: existing.part_no });
+    const { data: latest } = await supabase
+      .from("meeting_chunks")
+      .select("part_no")
+      .eq("meeting_id", meetingId)
+      .order("idx", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const closedPartNo = latest && latest.part_no > existing.part_no ? existing.part_no : null;
+    return NextResponse.json({
+      transcript: existing.transcript,
+      part_no: existing.part_no,
+      closed_part_no: closedPartNo,
+    });
   }
 
-  const [{ data: previousChunk }, { data: companyContext }] = await Promise.all([
+  const [{ data: previousChunk }, { data: companyContext }, { data: latestChunk }] = await Promise.all([
     supabase
       .from("meeting_chunks")
       .select("transcript")
@@ -62,7 +78,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq("idx", idx - 1)
       .maybeSingle(),
     supabase.from("company_context").select("vocabulary").maybeSingle(),
+    supabase
+      .from("meeting_chunks")
+      .select("part_no")
+      .eq("meeting_id", meetingId)
+      .order("idx", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  const currentPartNo = latestChunk?.part_no ?? 1;
+  const { data: partChunks } = await supabase
+    .from("meeting_chunks")
+    .select("audio_seconds")
+    .eq("meeting_id", meetingId)
+    .eq("part_no", currentPartNo);
+  const currentPartSeconds = (partChunks ?? []).reduce(
+    (sum, chunk) => sum + (chunk.audio_seconds ?? 0),
+    0
+  );
+
+  const { partNo, closedPartNo } = computeNextPartNo({
+    currentPartNo,
+    currentPartSeconds,
+    newChunkSeconds: audioSeconds,
+    forceNewPartAtLeast: forcePartNo,
+  });
 
   const prompt = buildWhisperPrompt(companyContext?.vocabulary ?? "", previousChunk?.transcript ?? "");
 
@@ -75,7 +116,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: inserted, error: insertError } = await supabase
     .from("meeting_chunks")
-    .insert({ meeting_id: meetingId, idx, transcript, audio_seconds: audioSeconds, status: "done" })
+    .insert({
+      meeting_id: meetingId,
+      idx,
+      part_no: partNo,
+      transcript,
+      audio_seconds: audioSeconds,
+      status: "done",
+    })
     .select("transcript, part_no")
     .single();
 
@@ -83,5 +131,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Não foi possível salvar o trecho." }, { status: 500 });
   }
 
-  return NextResponse.json({ transcript: inserted.transcript, part_no: inserted.part_no });
+  return NextResponse.json({
+    transcript: inserted.transcript,
+    part_no: inserted.part_no,
+    closed_part_no: closedPartNo,
+  });
 }

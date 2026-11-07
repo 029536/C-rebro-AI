@@ -18,7 +18,7 @@ import { requestWakeLock, type WakeLockHandle } from "@/lib/recorder/wakeLock";
 const CONSENT_KEY = "cerebro-ia:consentimento-gravacao";
 const RETRY_INTERVAL_MS = 5_000;
 
-type TranscriptSegment = { idx: number; text: string };
+type TranscriptSegment = { idx: number; partNo: number; text: string; at: string };
 
 function formatElapsed(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60)
@@ -26,6 +26,10 @@ function formatElapsed(totalSeconds: number): string {
     .padStart(2, "0");
   const seconds = (totalSeconds % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function formatClock(date: Date): string {
+  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function errorMessage(error: RecorderError): string {
@@ -39,7 +43,15 @@ function errorMessage(error: RecorderError): string {
   }
 }
 
-export function Recorder({ meetingId }: { meetingId: string }) {
+export function Recorder({
+  meetingId,
+  initialPartNo = 1,
+  initialIdx = 0,
+}: {
+  meetingId: string;
+  initialPartNo?: number;
+  initialIdx?: number;
+}) {
   const router = useRouter();
   const [consentGiven, setConsentGiven] = useState(
     () => typeof window !== "undefined" && localStorage.getItem(CONSENT_KEY) === "1"
@@ -53,13 +65,38 @@ export function Recorder({ meetingId }: { meetingId: string }) {
 
   const recorderRef = useRef<MeetingRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockHandle | null>(null);
-  const nextIdxRef = useRef(0);
+  const nextIdxRef = useRef(initialIdx);
+  const pendingCheckpointsRef = useRef<Set<number>>(new Set());
+
+  async function requestCheckpoint(partNo: number) {
+    try {
+      const response = await fetch(`/api/meetings/${meetingId}/checkpoint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ part_no: partNo }),
+      });
+      if (!response.ok) throw new Error("checkpoint falhou");
+      pendingCheckpointsRef.current.delete(partNo);
+    } catch {
+      // Sem travar a gravação: tenta de novo no próximo tick (ver retryPendingCheckpoints).
+      pendingCheckpointsRef.current.add(partNo);
+    }
+  }
+
+  async function retryPendingCheckpoints() {
+    for (const partNo of pendingCheckpointsRef.current) {
+      await requestCheckpoint(partNo);
+    }
+  }
 
   async function uploadChunk(chunk: QueuedChunk) {
     const formData = new FormData();
     formData.append("audio", chunk.blob, `chunk-${chunk.idx}.${chunk.extension}`);
     formData.append("idx", String(chunk.idx));
     formData.append("audioSeconds", String(chunk.audioSeconds));
+    if (chunk.forcePartNo !== undefined) {
+      formData.append("forcePartNo", String(chunk.forcePartNo));
+    }
 
     try {
       const response = await fetch(`/api/meetings/${meetingId}/chunks`, {
@@ -68,13 +105,20 @@ export function Recorder({ meetingId }: { meetingId: string }) {
       });
       if (!response.ok) throw new Error("upload falhou");
 
-      const data: { transcript: string } = await response.json();
+      const data: { transcript: string; part_no: number; closed_part_no: number | null } =
+        await response.json();
       await markChunkSent(chunk.key);
       setSegments((prev) =>
         prev.some((segment) => segment.idx === chunk.idx)
           ? prev
-          : [...prev, { idx: chunk.idx, text: data.transcript }].sort((a, b) => a.idx - b.idx)
+          : [
+              ...prev,
+              { idx: chunk.idx, partNo: data.part_no, text: data.transcript, at: new Date().toISOString() },
+            ].sort((a, b) => a.idx - b.idx)
       );
+      if (data.closed_part_no !== null) {
+        await requestCheckpoint(data.closed_part_no);
+      }
     } catch {
       await markChunkFailed(chunk.key);
     } finally {
@@ -91,11 +135,15 @@ export function Recorder({ meetingId }: { meetingId: string }) {
   }
 
   useEffect(() => {
-    const interval = setInterval(retryDueChunks, RETRY_INTERVAL_MS);
-    window.addEventListener("online", retryDueChunks);
+    function tick() {
+      retryDueChunks();
+      retryPendingCheckpoints();
+    }
+    const interval = setInterval(tick, RETRY_INTERVAL_MS);
+    window.addEventListener("online", tick);
     return () => {
       clearInterval(interval);
-      window.removeEventListener("online", retryDueChunks);
+      window.removeEventListener("online", tick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
@@ -136,16 +184,22 @@ export function Recorder({ meetingId }: { meetingId: string }) {
       onError: (recorderError) => setError(errorMessage(recorderError)),
       onChunk: async (chunk) => {
         const idx = nextIdxRef.current;
+        const isFirstChunkOfSession = idx === initialIdx;
         nextIdxRef.current += 1;
-        await enqueueChunk({ meetingId, idx, ...chunk });
-        await uploadChunk({
-          key: chunkKey(meetingId, idx),
+
+        const entry = {
           meetingId,
           idx,
+          ...chunk,
+          forcePartNo: isFirstChunkOfSession ? initialPartNo : undefined,
+        };
+        await enqueueChunk(entry);
+        await uploadChunk({
+          key: chunkKey(meetingId, idx),
           attempts: 0,
           nextAttemptAt: Date.now(),
           createdAt: Date.now(),
-          ...chunk,
+          ...entry,
         });
       },
     });
@@ -165,6 +219,7 @@ export function Recorder({ meetingId }: { meetingId: string }) {
     // enfileirado e para as tentativas pendentes mais recentes saírem.
     await new Promise((resolve) => setTimeout(resolve, 1500));
     await retryDueChunks();
+    await retryPendingCheckpoints();
 
     await fetch(`/api/meetings/${meetingId}`, {
       method: "PATCH",
@@ -227,11 +282,20 @@ export function Recorder({ meetingId }: { meetingId: string }) {
       )}
 
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
-        {segments.map((segment) => (
-          <p key={segment.idx} className="text-text">
-            {segment.text}
-          </p>
-        ))}
+        {segments.map((segment, index) => {
+          const previous = segments[index - 1];
+          const showMarker = !previous || previous.partNo !== segment.partNo;
+          return (
+            <div key={segment.idx}>
+              {showMarker && (
+                <p className="pb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                  Parte {segment.partNo}, {formatClock(new Date(segment.at))}
+                </p>
+              )}
+              <p className="text-text">{segment.text}</p>
+            </div>
+          );
+        })}
       </div>
 
       {status === "idle" ? (

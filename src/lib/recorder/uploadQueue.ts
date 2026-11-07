@@ -14,6 +14,8 @@ export type QueuedChunk = {
   mimeType: string;
   extension: string;
   audioSeconds: number;
+  /** Só no primeiro trecho depois de "Continuar gravação" (ver Fase 3 / resume). */
+  forcePartNo?: number;
   attempts: number;
   nextAttemptAt: number;
   createdAt: number;
@@ -59,6 +61,7 @@ export async function enqueueChunk(entry: {
   mimeType: string;
   extension: string;
   audioSeconds: number;
+  forcePartNo?: number;
 }): Promise<void> {
   const now = Date.now();
   const record: QueuedChunk = {
