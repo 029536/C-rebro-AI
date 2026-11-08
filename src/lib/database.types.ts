@@ -1,4 +1,4 @@
-// Gerado à mão a partir das migrações 0001, 0002, 0005, 0006 e 0007 (sem acesso a
+// Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007 e 0008 (sem acesso a
 // Docker/Supabase CLI local neste ambiente). Depois que o projeto Supabase existir e as
 // migrações forem aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
@@ -202,15 +202,49 @@ export type Database = {
           },
         ];
       };
+      meeting_minutes: {
+        Row: {
+          id: string;
+          meeting_id: string;
+          content: Json | null;
+          edited_ata_formal: string | null;
+          status: "pending" | "generating" | "ready" | "error";
+          error: string | null;
+          model: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          meeting_id: string;
+          content?: Json | null;
+          edited_ata_formal?: string | null;
+          status?: "pending" | "generating" | "ready" | "error";
+          error?: string | null;
+          model?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meeting_minutes"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meeting_minutes_meeting_id_fkey";
+            columns: ["meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       meeting_links: {
         Row: {
           meeting_id: string;
           previous_meeting_id: string;
+          link_type: "context" | "session";
           created_at: string;
         };
         Insert: {
           meeting_id: string;
           previous_meeting_id: string;
+          link_type?: "context" | "session";
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["meeting_links"]["Insert"]>;
@@ -332,12 +366,14 @@ export type Database = {
           owner_id: string;
           context: string;
           vocabulary: string;
+          letterhead: string;
           updated_at: string;
         };
         Insert: {
           owner_id?: string;
           context?: string;
           vocabulary?: string;
+          letterhead?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["company_context"]["Insert"]>;

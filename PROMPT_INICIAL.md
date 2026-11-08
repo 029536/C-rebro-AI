@@ -114,6 +114,26 @@ Decisão de 2026-11-08: adiantamos e ampliamos a Fase 7 original para logo após
 - Ao criar reunião, escolher o projeto (opcional) — isso também passa a alimentar a sugestão "mesmo projeto" da Fase 2.8. No parecer e no plano, citar arquivos e documentos reais do projeto quando relevante.
 - **Aceite:** importo o zip de um projeto real e um PDF e um `.docx` de teste; `.env`/`node_modules` ficam de fora do zip; um PDF com senha e um PDF escaneado são recusados com mensagem clara; o parecer cita arquivos/documentos que existem; reimportar não duplica; excluir o projeto apaga tudo; testes de filtros, detecção de segredos (em nome de arquivo e em texto de documento) e `selectFiles`.
 
+### Fase 3.7: ata estruturada e sessões (redesenho "Lumi Ata Inteligente")
+
+Decisão de 2026-11-08: redesenho visual e de produto inspirado na "Lumi Ata Inteligente" (outro sistema do Isaias), que absorve o pedido anterior de "conversa contínua". A ata passa a ser um documento separado do parecer — fiel, gerado sozinho, nunca opinativo. Seis etapas, uma por vez, cada uma com lint/typecheck/testes e checklist no celular antes da próxima.
+
+**Decisões já tomadas (não reabrir sem avisar):** no desktop, o painel da reunião é um painel lateral de verdade sobre a lista (rotas paralelas/interceptadas do Next.js, `@modal/(.)reunioes/[id]`), não uma página cheia simplificada. Sem provedor temporário da OpenAI para a ata — a geração real espera a chave da Anthropic; até lá, `MOCK_AI=1`.
+
+**Etapa 1 — migração e modelo de dados** (concluída): `0008_meeting_minutes.sql` (tabela `meeting_minutes`; `meeting_links.link_type`; `company_context.letterhead`, sem logo). `src/lib/minutes/schema.ts` (zod do documento da ata: `titulo`, `data` AAAA-MM-DD, `horario` HH:mm, `tipo`, `cliente_ou_empresa`, `participantes`, `assuntos_discutidos[]`, `decisoes[]`, `responsabilidades[]`, `acoes_futuras[]`, `observacoes`, `resumo_executivo`, `proximos_encontros[]`, `ata_formal`). `src/lib/minutes/rules.ts` (`isTranscriptTooSparse`, regra D4). `formatISODate` em `lib/format.ts`. Testes dos três.
+
+**Etapa 2 — lista nova e painel com ata simulada**: redesenho da lista (cartões, selo de status derivado de `meetings.status` + `meeting_minutes.status`, "Em andamento" com Retomar, sessões agrupadas em "N sessões" — agrupar por componente conexo da corrente `link_type = 'session'` —, filtro Recentes/Arquivadas, nav inferior). Painel da reunião com rotas paralelas/interceptadas (`@modal`), abas Ata/Parecer/Plano/Chat/Transcrição/Sessões (as 4 últimas com "ainda não disponível" por enquanto). Com `MOCK_AI=1`, a ata exibida é um documento de exemplo fixo. `lucide-react` para ícones.
+
+**Etapa 3 — exportação e cabeçalho em Configurações**: tela Configurações (contexto, vocabulário, cabeçalho de até 5 linhas). `lib/minutes/export.ts`: HTML de impressão (tema claro sempre, `window.print()`), HTML para `.docx` (cabeçalho em **tabela**, imagem nunca — sem logo nesta v1 —, mas a regra de tabela/width-height como atributo vale para qualquer HTML gerado para Word), copiar texto, compartilhar (Web Share API no celular, `mailto:` de alternativa). Teste do HTML de exportação (estrutura, não pixel).
+
+**Etapa 4 — geração real da ata**: `POST /api/meetings/[id]/minutes` (gera com saída estruturada validada por `zod`; aplica D1-D4: data/hora reais do servidor em America/Sao_Paulo, participantes do formulário como única fonte de nomes, reunião interna nunca presume cliente, transcrição esparsa falha com mensagem honesta e "Tentar de novo"). Disparada sozinha ao `action: "finish"`. `PATCH /api/meetings/[id]/minutes` salva o ajuste manual. Estados `pending → generating → ready/error` refletidos no cartão.
+
+**Etapa 5 — abas e "Continuar em nova sessão"**: Parecer/Plano/Chat ganham conteúdo real (ver Fases 4-6 abaixo, que também avançam aqui). Botão **Continuar em nova sessão** (reunião nova, herda tipo/cliente/participantes/contexto, grava `link_type = 'session'`, vai direto à gravação) ao lado de **Retomar gravação** (renomeado, mesma sessão que caiu). Aba Sessões com a linha do tempo. Chat contínuo: o servidor resolve a corrente `session` a partir da reunião atual e junta `chat_messages` de todas.
+
+**Etapa 6 — acabamento visual**: skeletons de carregamento, estados vazios com orientação, mensagens de erro consistentes, revisão de toques (44 px+) e nav inferior em todas as telas.
+
+**Aceite da fase inteira:** encerro uma gravação e a ata aparece sozinha (ou a mensagem honesta, se o áudio for mudo/sem sentido); exporto PDF e DOCX e abrem corretamente num editor de verdade; edito a ata manualmente sem perder a versão gerada; continuo a conversa em nova sessão e vejo "2 sessões" na lista, com o chat contínuo; no desktop, abrir uma reunião mostra o painel lateral com a lista ainda visível atrás.
+
 ### Fase 4: Claude na sala (copiloto)
 
 - `lib/ai/prompts.ts` (prompts do apêndice) e `lib/ai/anthropic.ts`.
@@ -132,7 +152,7 @@ Decisão de 2026-11-08: adiantamos e ampliamos a Fase 7 original para logo após
 
 ### Fase 6: plano de execução e prompts prontos
 
-- Criar a migração `0008_dev_plans.sql`: `dev_plans` e `dev_tasks` como já estava especificado, com a coluna `progress_note text not null default ''` em `dev_tasks`.
+- Criar a migração `0009_dev_plans.sql`: `dev_plans` e `dev_tasks` como já estava especificado, com a coluna `progress_note text not null default ''` em `dev_tasks`.
 - `POST /api/meetings/[id]/plan`: usa o prompt "Plano de execução" do apêndice com saída estruturada (tool use) validada por `zod`; grava `dev_plans` e `dev_tasks` (origem `final`). Inclui o mapa do repositório, os arquivos e documentos relevantes do projeto (Fase 3.6), e o Andamento das reuniões ligadas (Fase 2.8), quando houver.
 - `POST /api/meetings/[id]/tasks/draft`: cria uma tarefa rascunho (origem `draft`) a partir dos últimos minutos da conversa, para o botão **Preparar prompt deste assunto** na tela de gravação.
 - `PATCH /api/tasks/[taskId]` para status (`todo`, `doing`, `done`), nota de andamento, título e prompt editáveis.
@@ -415,7 +435,43 @@ create policy project_documents_owner_all on public.project_documents
   using (public.owns_project(project_id)) with check (public.owns_project(project_id));
 ```
 
-### `0008_dev_plans.sql`
+### `0008_meeting_minutes.sql`
+
+```sql
+-- Ata estruturada (documento fiel do que foi dito), separada do parecer (opinião do
+-- Claude). Várias versões por reunião — regenerar cria uma nova linha, vale a mais
+-- recente —, igual já fazemos em `analyses`.
+create table public.meeting_minutes (
+  id uuid primary key default gen_random_uuid(),
+  meeting_id uuid not null references public.meetings(id) on delete cascade,
+  content jsonb,
+  -- Ajuste manual do texto formal, sem precisar regenerar com IA; nulo = usar content.ata_formal.
+  edited_ata_formal text,
+  status text not null default 'pending' check (status in ('pending', 'generating', 'ready', 'error')),
+  error text,
+  model text,
+  created_at timestamptz not null default now()
+);
+create index meeting_minutes_meeting_idx on public.meeting_minutes (meeting_id, created_at desc);
+
+alter table public.meeting_minutes enable row level security;
+
+create policy meeting_minutes_owner_all on public.meeting_minutes
+  for all to authenticated
+  using (public.owns_meeting(meeting_id)) with check (public.owns_meeting(meeting_id));
+
+-- Distingue "dei isso como contexto geral" (context, Fase 2.8) de "é a mesma conversa,
+-- outra sessão" (session, "Continuar em nova sessão") — só os links "session" agrupam
+-- reuniões num cartão "N sessões" na lista.
+alter table public.meeting_links
+  add column link_type text not null default 'context' check (link_type in ('context', 'session'));
+
+-- Cabeçalho institucional da ata (texto, sem logo): até 5 linhas, validado no app.
+alter table public.company_context
+  add column letterhead text not null default '';
+```
+
+### `0009_dev_plans.sql`
 
 ```sql
 create table public.dev_plans (
@@ -461,7 +517,7 @@ create policy dev_tasks_owner_all on public.dev_tasks
   using (public.owns_meeting(meeting_id)) with check (public.owns_meeting(meeting_id));
 ```
 
-Observação para o Claude Code: os números pulam de `0005` para `0006` porque `0003` e `0004` eram nomes reservados no plano original para projetos e plano de execução, nunca chegaram a virar arquivo, e as fases que os usam foram adiantadas/reordenadas — por isso os nomes definitivos são `0007_projects.sql` e `0008_dev_plans.sql`, aplicados depois de `0006_meeting_links.sql`. Siga a ordem numérica ao aplicar. Antes de aplicar qualquer migração nova, revise o SQL, aponte problemas (privilégios, índices, funções do Supabase) e proponha correções.
+Observação para o Claude Code: os números pulam de `0005` para `0006` porque `0003` e `0004` eram nomes reservados no plano original para projetos e plano de execução, nunca chegaram a virar arquivo, e as fases que os usam foram adiantadas/reordenadas — por isso os nomes definitivos são `0006_meeting_links.sql`, `0007_projects.sql`, `0008_meeting_minutes.sql` e `0009_dev_plans.sql`, nessa ordem. Siga a ordem numérica ao aplicar. Antes de aplicar qualquer migração nova, revise o SQL, aponte problemas (privilégios, índices, funções do Supabase) e proponha correções.
 
 ---
 
@@ -490,6 +546,22 @@ Você resume uma parte de uma reunião longa para que o restante da conversa pos
 
 Você receberá, em tags, o tipo da reunião, o cliente e os participantes (se houver), o checkpoint da parte anterior (se houver) e a transcrição da parte que acabou de fechar. Escreva em português do Brasil, em Markdown, um resumo fiel desta parte **somente**: assuntos tratados, decisões firmes, ideias propostas e quem as defendeu quando estiver claro, riscos levantados, perguntas em aberto e pendências. Inclua nomes, números, prazos e termos técnicos exatos — use os nomes dos participantes exatamente como foram informados. Não opine, não repita o que já está no checkpoint anterior e não invente. Máximo de cerca de 600 palavras.
 ```
+
+### Ata da reunião (saída estruturada)
+
+```text
+Você gera a ata de uma reunião: o registro FIEL do que foi dito, sem opinião nenhuma (isso é o parecer, em outra chamada). Responda chamando a ferramenta "salvar_ata" com o documento estruturado.
+
+Regras, nesta ordem de importância:
+1. A data e o horário vêm prontos em {data} e {horario} (fonte única, calculados pelo servidor) — use-os, a menos que a fala cite explicitamente outra data ou horário, e nesse caso diga qual trecho da fala justifica a mudança.
+2. Os participantes informados a seguir são a única fonte confiável de nomes: use-os exatamente como escritos. Se nenhum participante foi informado, use só os nomes que aparecerem claramente na transcrição — nunca invente.
+3. Se o tipo for "interna", nunca presuma um cliente nem invente um responsável por uma ação; deixe em branco o que não foi dito.
+4. Preencha assuntos_discutidos, decisoes, responsabilidades, acoes_futuras, proximos_encontros só com o que foi dito; listas vazias são aceitáveis e melhores que inventar. resumo_executivo: 2-3 frases. ata_formal: texto corrido pronto para impressão, com cabeçalho (título, data, horário, participantes), corpo (assuntos, decisões, responsabilidades, ações) e fechamento.
+
+Contexto da empresa: {contexto}. Tipo: {tipo}. Cliente ou empresa: {cliente}. Participantes informados: {participantes}. Data: {data}. Horário: {horario}.
+```
+
+Antes de chamar o modelo, o servidor aplica a regra D4 (`isTranscriptTooSparse`): transcrição muito curta, com poucas palavras, ou dominada por outro alfabeto não vai para o Claude — a rota devolve erro direto, com mensagem honesta, sem gastar uma chamada.
 
 ### Parecer final
 

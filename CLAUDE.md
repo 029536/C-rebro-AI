@@ -6,14 +6,15 @@ Leia este arquivo inteiro antes de qualquer tarefa. Ele é a fonte de verdade so
 
 Cérebro IA é um app de uso próprio (do Isaias e de seus sócios, na empresa Saber Crescer). Não será vendido nem distribuído, e não precisa escalar. Ele grava reuniões com clientes e sócios, transcreve o áudio e usa o Claude como um **terceiro sócio**: um engenheiro de software e de produto sênior que escuta a conversa, comenta durante a reunião (riscos, caminhos técnicos, perguntas para o cliente) e entrega um parecer no fim. Depois, a equipe conversa com o Claude sobre a reunião num chat.
 
-Quatro funções vão além disso e são o diferencial do app:
+Cinco funções vão além disso e são o diferencial do app:
 
 1. **Plano de execução com prompts prontos.** Do que foi discutido, o Claude monta o plano de como desenvolver e, para cada tarefa, escreve um prompt completo, pronto para colar no Claude Code.
 2. **Projetos com código e material de apoio importados.** O usuário sobe o `.zip` do código que já existe e documentos de apoio (`.md`, `.txt`, `.pdf`, `.docx`, `.csv`), e o Claude passa a enxergar o que foi construído e documentado, para sugerir e planejar com base no material real (não só em contexto digitado).
 3. **Reuniões longas e interrompidas.** A gravação é dividida em partes. Se a reunião passar de 45 minutos ou a gravação for interrompida, o app continua da mesma reunião, sem refazer nada do que já foi feito.
 4. **Memória entre reuniões.** Ao criar uma reunião, dá para escolher reuniões anteriores do mesmo cliente ou projeto; o Claude recebe a ata, o parecer e o andamento das tarefas combinadas nelas, para não repetir o que já foi dito nem o que já foi feito, e cobrar o que ficou pendente.
+5. **Ata formal e sessões.** Ao encerrar a gravação, o app gera sozinho uma ata estruturada (documento fiel do que foi dito, pronta para PDF/Word) — separada do parecer, que é a opinião do Claude. Uma conversa pode continuar em outro dia como uma nova sessão ligada à mesma linha do tempo, com um chat contínuo entre elas.
 
-O Claude opina e julga; ele não é secretário. A ata é só a última seção do parecer. O app **gera** os prompts, mas não executa nada sozinho: quem cola e roda no Claude Code é o usuário.
+O Claude opina e julga; ele não é secretário. A ata é o registro fiel (gerada automaticamente, sem opinião); o parecer é a opinião do terceiro sócio, em documento separado. O app **gera** os prompts, mas não executa nada sozinho: quem cola e roda no Claude Code é o usuário.
 
 Uso principal: **celular e tablet**, em reuniões presenciais (aparelho na mesa). No notebook, o app só precisa funcionar bem, sem recursos extras.
 
@@ -25,7 +26,7 @@ Uso principal: **celular e tablet**, em reuniões presenciais (aparelho na mesa)
 - **Transcrição: OpenAI** (`whisper-1`, configurável em `TRANSCRIBE_MODEL`).
 - **Raciocínio: Anthropic Claude.** `CLAUDE_MODEL` (padrão `claude-sonnet-5-5`) para copiloto, parecer, chat e plano; `CLAUDE_FAST_MODEL` (padrão `claude-haiku-5-5`) para tarefas baratas e repetitivas (resumo de arquivos, escolha de arquivos relevantes, checkpoints). A API da Anthropic não aceita áudio, por isso a transcrição é separada.
 - **Provedores atrás de uma interface** (`lib/ai`): hoje Anthropic e OpenAI; um provedor Gemini pode ser acrescentado depois sem mexer no resto. Não implemente Gemini na v1.
-- Bibliotecas sugeridas: `@supabase/ssr`, `@anthropic-ai/sdk`, `openai`, `zod`, `fflate` (zip no navegador), `vitest`. Para extrair texto de documentos no navegador: `pdfjs-dist` (PDF) e `mammoth` (`.docx`); `.md`, `.txt` e `.csv` são lidos direto. Confirme as versões atuais antes de instalar.
+- Bibliotecas sugeridas: `@supabase/ssr`, `@anthropic-ai/sdk`, `openai`, `zod`, `fflate` (zip no navegador), `vitest`, `lucide-react` (ícones). Para extrair texto de documentos no navegador: `pdfjs-dist` (PDF) e `mammoth` (`.docx`); `.md`, `.txt` e `.csv` são lidos direto. Confirme as versões atuais antes de instalar.
 - **PWA mobile-first**: instalável na tela inicial do celular.
 - Isto substitui um protótipo anterior em Flask. A lógica e os prompts foram portados; não recrie o Flask.
 
@@ -51,9 +52,10 @@ Uso principal: **celular e tablet**, em reuniões presenciais (aparelho na mesa)
 3. Cada trecho vai para `POST /api/meetings/[id]/chunks`: o servidor transcreve com Whisper (passando vocabulário da empresa e o final do trecho anterior como `prompt`), salva o texto em `meeting_chunks` (com `idx` e `part_no`) e devolve o texto e o `part_no` atual. **O áudio não é armazenado.**
 4. Quando uma parte passa de 45 minutos (soma de `audio_seconds`, configurável em `PART_MINUTES`), o servidor passa a gravar os próximos trechos na parte seguinte e o cliente chama `POST /api/meetings/[id]/checkpoint` para resumir a parte que fechou. A gravação **não** é interrompida.
 5. Se "Claude opina sozinho" estiver ligado, após cada trecho o cliente chama `POST /api/meetings/[id]/copilot`. O servidor monta o contexto (ver abaixo), anexa as notas anteriores do Claude (para ele não se repetir) e chama o Claude. Resposta `SEM_CONTRIBUICAO` não é exibida nem salva. Há também "Pedir opinião agora" (`kind = manual`, nunca vazio).
-6. Ao encerrar, `POST /api/meetings/[id]/analyze` gera o parecer final em streaming. O resultado vai para `analyses`.
-7. `POST /api/meetings/[id]/plan` gera o **plano de execução**: lista de tarefas ordenadas, cada uma com um prompt para o Claude Code, salvas em `dev_plans` e `dev_tasks`. Durante a reunião, "Preparar prompt deste assunto" cria uma tarefa rascunho a partir dos últimos minutos.
-8. `POST /api/meetings/[id]/chat` conversa sobre a reunião, com transcrição e parecer como contexto, em streaming.
+6. Ao encerrar (`action: "finish"`), o servidor dispara sozinho `POST /api/meetings/[id]/minutes`, que gera a **ata** estruturada (ver "Ata da reunião") e grava em `meeting_minutes`. O cartão da reunião mostra "Gerando ata..." até terminar.
+7. `POST /api/meetings/[id]/analyze` gera o **parecer** final em streaming (a opinião do Claude, separada da ata). O resultado vai para `analyses`.
+8. `POST /api/meetings/[id]/plan` gera o **plano de execução**: lista de tarefas ordenadas, cada uma com um prompt para o Claude Code, salvas em `dev_plans` e `dev_tasks`. Durante a reunião, "Preparar prompt deste assunto" cria uma tarefa rascunho a partir dos últimos minutos.
+9. `POST /api/meetings/[id]/chat` conversa sobre a conversa inteira (todas as sessões ligadas, não só esta reunião — ver "Sessões"), com transcrição, ata e parecer como contexto, em streaming.
 
 ### Como montar o contexto do Claude (copiloto, parecer, plano, chat)
 
@@ -75,16 +77,40 @@ Os pontos 2 a 4 têm orçamento próprio de caracteres (ver cada seção); quand
 - Um checkpoint resume **somente** a sua parte, usando o checkpoint anterior como contexto. **Checkpoints nunca são reescritos** (a tabela não permite update). A parte seguinte só dá continuidade.
 - **Retomar gravação:** se a gravação for interrompida (ligação, tela bloqueada, app fechado), a reunião continua aberta. O usuário toca em "Continuar gravação" e o app abre uma nova parte (`part_no + 1`) na mesma reunião, sem tocar no que já existe. Se o app detectar que o `MediaRecorder` parou sozinho, mostra um aviso e oferece retomar.
 - A transcrição aparece como um texto contínuo, com um marcador discreto no início de cada parte ("Parte 2, 10:45").
-- Há uma única ata e um único parecer por reunião, nunca um por parte.
+- Há uma única ata e um único parecer "vigentes" por reunião (a versão mais recente), nunca um por parte — mas a ata pode ser regenerada (nova versão) sem regravar.
+
+## Ata da reunião
+
+Objetivo: um registro **fiel** do que foi dito, gerado sozinho ao encerrar a gravação — sem opinião, sem julgamento (isso é o parecer, documento separado).
+
+- Documento estruturado (`meeting_minutes.content`, jsonb, validado com `zod`): `titulo`, `data` (AAAA-MM-DD), `horario` (HH:mm), `tipo`, `cliente_ou_empresa`, `participantes`, `assuntos_discutidos[]`, `decisoes[]`, `responsabilidades[]` (`{parte, itens[]}`, "parte" livre: nossa equipe, cliente etc.), `acoes_futuras[]` (`{acao, responsavel?, prazo?}`), `observacoes`, `resumo_executivo`, `proximos_encontros[]`, e `ata_formal` (texto corrido pronto para impressão, com cabeçalho/corpo/fechamento).
+- **Regras de geração** (nunca abrir mão delas):
+  1. A data e o horário reais vêm do servidor (`meetings.started_at`, em America/Sao_Paulo) e entram no prompt como fonte única; o modelo só usa outra data se a fala citar uma explicitamente.
+  2. Os participantes do formulário são a única fonte confiável de nomes — usar exatamente como digitados. Sem participantes informados, usar o que aparecer na transcrição, sem inventar.
+  3. Reunião interna (`meeting_type = 'internal'`): nunca presumir cliente nem inventar responsável.
+  4. Transcrição muito curta, sem sentido, ou dominada por outro alfabeto (Whisper "alucinando" em cima de áudio mudo): **não gerar ata** — falhar com mensagem honesta e botão "Tentar de novo", sem inventar conteúdo.
+- Estados (`meeting_minutes.status`): `pending` → `generating` → `ready` ou `error`. O cartão da reunião mostra isso (Transcrevendo/Gerando ata/Pronta/Erro).
+- Pode regenerar sem regravar (nova linha em `meeting_minutes`, vale a mais recente) e editar manualmente o texto formal (`edited_ata_formal`, sem precisar da IA).
+- Exportação é só do navegador: PDF via impressão (HTML limpo, tema claro sempre), DOCX gerado no navegador (cabeçalho em **tabela**, nunca flexbox; imagem com `width`/`height` como atributo, não CSS — regra aprendida do sistema anterior), copiar texto, compartilhar (Web Share API no celular, `mailto:` como alternativa).
+- Cabeçalho institucional (`company_context.letterhead`, até 5 linhas de texto, sem logo) é editável em Configurações e entra no topo do documento exportado.
 
 ## Memória entre reuniões
 
 Objetivo: o Claude enxergar o que já foi dito e decidido em reuniões anteriores do mesmo cliente ou projeto, para não repetir perguntas nem recomeçar do zero.
 
-- Na tela "Nova reunião", seção **"Partir de reuniões anteriores"**: lista de reuniões já encerradas (`status` `ready` ou `analyzed`), mais recentes primeiro, com destaque para as do mesmo `client_name` (e, quando a reunião tiver projeto, do mesmo projeto). Escolha múltipla, opcional.
-- Cada escolha grava uma linha em `meeting_links(meeting_id, previous_meeting_id)`. É só uma ligação: não copia nem duplica dado nenhum.
-- No contexto do Claude (ver "Como montar o contexto"), cada reunião ligada entra em tags com título, data, ata (a última seção do parecer) e o restante do parecer. Se o total passar do orçamento de caracteres, use o resumo mais recente de cada uma (checkpoint da última parte, se não houver parecer ainda) em vez do parecer inteiro.
+- Na tela "Nova reunião", seção **"Partir de reuniões anteriores"**: lista de reuniões já encerradas (`status` `ready` ou `analyzed`), mais recentes primeiro, com destaque para as do mesmo `client_name` (e, quando a reunião tiver projeto, do mesmo projeto). Escolha múltipla, opcional. Cada escolha grava `meeting_links(meeting_id, previous_meeting_id, link_type = 'context')`.
+- É só uma ligação: não copia nem duplica dado nenhum.
+- No contexto do Claude (ver "Como montar o contexto"), cada reunião ligada entra em tags com título, data, ata e parecer. Se o total passar do orçamento de caracteres, use o resumo mais recente de cada uma em vez do conteúdo inteiro.
 - Excluir uma reunião remove as ligações que a envolvem (cascata), mas não afeta o conteúdo da outra ponta.
+
+## Sessões (continuar a mesma conversa)
+
+Objetivo: uma conversa real dura vários encontros; o app trata isso como uma única linha do tempo, não reuniões soltas.
+
+- **Retomar gravação** (já existia): a gravação caiu no meio (ligação, tela bloqueada) — mesma reunião, nova parte. **Continuar em nova sessão** (novo): a conversa segue em outro dia — cria uma **reunião nova**, pré-preenchida com tipo/cliente/participantes/contexto da anterior, ligada a ela por `meeting_links(..., link_type = 'session')`, e vai direto para a gravação (sem passar pelo formulário).
+- `link_type = 'session'` forma uma corrente simples (cada sessão aponta para a anterior), diferente de `link_type = 'context'` (memória geral, pode apontar para qualquer reunião). Só as ligações `session` agrupam reuniões num cartão **"N sessões"** na lista.
+- O **chat é um só por conversa**: ao montar o histórico, o servidor segue a corrente `session` a partir da reunião atual e junta as mensagens de todas as sessões, em ordem — lê como uma conversa contínua, não importa de qual sessão você está conversando.
+- A aba "Sessões" na reunião mostra essa linha do tempo, com link para abrir qualquer uma.
 
 ## Projetos: código e material de apoio
 
@@ -127,28 +153,32 @@ cerebro-ia/
 │   │   ├── (app)/
 │   │   │   ├── page.tsx                  # lista de reuniões
 │   │   │   ├── nova/page.tsx             # formulário + gravação
-│   │   │   ├── reunioes/[id]/page.tsx    # dados da reunião, parecer, plano de execução e chat
+│   │   │   ├── reunioes/[id]/page.tsx    # painel: Ata, Parecer, Plano, Chat, Transcrição, Sessões
+│   │   │   ├── @modal/(.)reunioes/[id]/page.tsx  # mesma tela, interceptada como painel lateral no desktop
 │   │   │   ├── projetos/page.tsx         # lista e importação de zip/documentos
 │   │   │   ├── projetos/[id]/page.tsx    # detalhe do projeto (arquivos e documentos)
-│   │   │   └── configuracoes/page.tsx    # contexto da empresa
+│   │   │   └── configuracoes/page.tsx    # contexto da empresa, vocabulário, cabeçalho da ata
 │   │   └── api/
-│   │       ├── meetings/route.ts                      # POST criar (e ligar reuniões anteriores)
+│   │       ├── meetings/route.ts                      # POST criar (projeto, reuniões anteriores/sessão)
 │   │       ├── meetings/[id]/route.ts                 # PATCH encerrar/retomar/arquivar/editar, DELETE
 │   │       ├── meetings/[id]/chunks/route.ts          # POST trecho de áudio
 │   │       ├── meetings/[id]/checkpoint/route.ts      # POST resumo de parte
+│   │       ├── meetings/[id]/minutes/route.ts         # POST gerar/regenerar, PATCH editar a ata
 │   │       ├── meetings/[id]/copilot/route.ts         # POST opinião
 │   │       ├── meetings/[id]/analyze/route.ts         # POST parecer (stream)
 │   │       ├── meetings/[id]/plan/route.ts            # POST plano de execução
 │   │       ├── meetings/[id]/tasks/draft/route.ts     # POST prompt do assunto atual
-│   │       ├── meetings/[id]/chat/route.ts            # POST chat (stream)
+│   │       ├── meetings/[id]/chat/route.ts            # POST chat (stream, contínuo entre sessões)
 │   │       ├── meetings/prepare/route.ts              # POST preencher formulário por IA
 │   │       ├── tasks/[taskId]/route.ts                # PATCH status e nota de andamento
+│   │       ├── company-context/route.ts               # GET/PATCH contexto, vocabulário, cabeçalho
 │   │       ├── projects/route.ts                      # POST criar
 │   │       └── projects/[id]/{files,documents,summarize,finalize}/route.ts, route.ts (DELETE)
-│   ├── components/              # Recorder, MeetingSetupForm, CopilotFeed, TranscriptStrip, AnalysisView, PlanView, TaskCard, ProjectImporter, ChatBox
+│   ├── components/              # Recorder, MeetingSetupForm, MinutesView, CopilotFeed, TranscriptStrip, AnalysisView, PlanView, TaskCard, ProjectImporter, ChatBox, BottomNav
 │   └── lib/
 │       ├── supabase/            # client.ts, server.ts, proxy helper
 │       ├── ai/                  # anthropic.ts, openai.ts, transcribe.ts, prompts.ts, context.ts, checkpoint.ts, plan.ts
+│       ├── minutes/             # schema.ts (zod da ata), rules.ts (data real, áudio mudo), export.ts (HTML/DOCX)
 │       ├── recorder/            # recorder.ts, uploadQueue.ts (IndexedDB), mime.ts, wakeLock.ts
 │       ├── projects/            # zip.ts, documents.ts, filters.ts, secrets.ts, repoMap.ts, selectFiles.ts
 │       ├── participants.ts      # tipo e validação de participantes
@@ -165,16 +195,17 @@ Todas as tabelas com Row Level Security. Cada linha pertence a um usuário; filh
 | `meetings` | Reunião: título, status (`recording`, `ready`, `analyzed`), tipo (`client`/`internal`), cliente, participantes (jsonb), contexto, início, fim, duração, foco, arquivamento, `project_id` opcional |
 | `meeting_chunks` | Texto de cada trecho, com `idx` único por reunião e `part_no` |
 | `meeting_checkpoints` | Resumo imutável de cada parte de uma reunião longa |
-| `meeting_links` | Ligação `meeting_id → previous_meeting_id`: de quais reuniões anteriores esta reunião "parte" |
+| `meeting_minutes` | Ata estruturada (jsonb) + ajuste manual opcional; várias versões, vale a mais recente |
+| `meeting_links` | Ligação `meeting_id → previous_meeting_id`, com `link_type` (`context`: memória geral; `session`: mesma conversa, outra sessão) |
 | `copilot_notes` | Comentários do Claude durante a reunião (`auto` ou `manual`) |
 | `analyses` | Parecer final em Markdown; várias versões, vale a mais recente |
-| `chat_messages` | Conversa com o Claude sobre a reunião |
+| `chat_messages` | Conversa com o Claude; contínua entre sessões (resolvida em tempo de consulta pela corrente `link_type = 'session'`) |
 | `projects` | Projeto com código e documentos importados: nome, mapa do repositório, contagens |
 | `project_files` | Arquivos de código do projeto, com hash e resumo |
 | `project_documents` | Documentos de apoio do projeto (texto extraído de `.pdf`, `.docx` etc.), com hash e resumo |
 | `dev_plans` | Plano de execução gerado a partir de uma reunião |
 | `dev_tasks` | Tarefas do plano (ou rascunhos), com status, nota curta de andamento e o prompt para o Claude Code |
-| `company_context` | Contexto da empresa e vocabulário, editáveis na tela de configurações |
+| `company_context` | Contexto da empresa, vocabulário e cabeçalho da ata (texto, até 5 linhas), editáveis em Configurações |
 
 Regras: toda mudança de esquema vira uma migração em `supabase/migrations/`; excluir uma reunião ou projeto apaga tudo em cascata; as rotas usam o cliente Supabase da sessão do usuário (RLS ativo). A chave `service_role` não é usada no caminho de usuário e nunca vai para o navegador.
 
@@ -184,7 +215,7 @@ Regras: toda mudança de esquema vira uma migração em `supabase/migrations/`; 
 - Validar entrada das rotas com `zod`. Erros em JSON `{ "error": "mensagem" }` com status HTTP correto.
 - Nunca registrar em log o texto das reuniões, o código e os documentos importados, o áudio ou chaves.
 - Provedores de IA ficam atrás de funções em `lib/ai`, para poder simular nos testes e rodar em desenvolvimento sem chaves (`MOCK_AI=1`).
-- Testes com Vitest para lógica pura (montagem de contexto, ordenação de trechos, partes e checkpoints, filtros de zip e detecção de segredos, extração de texto de documentos, orçamento de memória entre reuniões, escolha de MIME, fila de upload, validação do plano). Áudio real é verificado em checklist manual.
+- Testes com Vitest para lógica pura (montagem de contexto, ordenação de trechos, partes e checkpoints, filtros de zip e detecção de segredos, extração de texto de documentos, orçamento de memória entre reuniões, esquema da ata, regra de data real, detecção de áudio mudo/sem sentido, HTML de exportação, escolha de MIME, fila de upload, validação do plano). Áudio real é verificado em checklist manual.
 - Commits pequenos, um por entrega, em português. Nunca commitar `.env*`.
 - Scripts esperados: `dev`, `build`, `lint`, `typecheck`, `test`.
 
@@ -200,7 +231,13 @@ Mobile-first, uma coluna, alvos de toque de pelo menos 44 px (botões principais
 | Acento (Claude) | `#3D4DB7`, fundo suave `#E8EBFA` |
 | Gravar / encerrar | `#C62F3A` |
 
-Telas aprovadas: Entrar, Reuniões, Gravando (cronômetro, ondas, interruptor "Claude opina sozinho", feed "Claude na sala", faixa de transcrição, "Pedir opinião agora", "Encerrar") e Parecer (diagnóstico, avaliação, como desenvolveria, perguntas, ata recolhida, chat). As telas novas (Nova reunião com formulário e memória entre reuniões, Projetos, Plano de execução, retomar gravação) devem seguir o mesmo estilo; proponha o layout antes de implementar.
+Telas aprovadas: Entrar, Gravando (cronômetro, ondas, interruptor "Claude opina sozinho", feed "Claude na sala", faixa de transcrição, "Pedir opinião agora", "Encerrar").
+
+**Redesenho no modelo "Lumi Ata Inteligente"** (aprovado em 2026-11-08): visual mais profissional — `lucide-react` para ícones, cartões com sombra suave, hierarquia tipográfica mais clara, estados vazios com orientação, skeletons de carregamento, mensagens de erro claras, sem emojis na interface, nav inferior no celular (Reuniões, Nova, Projetos, Configurações).
+- **Reuniões**: cartões com selo de status, prévia do resumo executivo, Abrir/Arquivar/Excluir; "Em andamento" no topo com Retomar; sessões da mesma conversa agrupadas num cartão "N sessões"; filtro Recentes/Arquivadas.
+- **Reunião**: painel com abas Ata | Parecer | Plano | Chat | Transcrição | Sessões. No celular, tela cheia com botão de fechar; no desktop, painel lateral sobre a lista (rota interceptada, `@modal/(.)reunioes/[id]`). A ata é exibida em "folha branca" com tipografia serifada, como documento formal, com barra de ações (PDF, DOCX, copiar, compartilhar, editar, arquivar).
+- **Configurações** (nova; adiantada da antiga Fase 8): contexto da empresa, vocabulário, cabeçalho da ata.
+- **Projetos** e **Plano de execução**: seguem o mesmo estilo das demais telas novas.
 
 ## Privacidade (LGPD)
 

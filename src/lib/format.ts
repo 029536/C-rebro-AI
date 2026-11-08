@@ -16,6 +16,17 @@ export function formatDate(value: Date | string): string {
   }).format(toDate(value));
 }
 
+/** AAAA-MM-DD (ISO), para campos estruturados como a ata — não para exibir na tela. */
+export function formatISODate(value: Date | string): string {
+  // en-CA formata datas como AAAA-MM-DD; é só um truque de locale, não troca o fuso.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(toDate(value));
+}
+
 export function formatTime(value: Date | string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: TIME_ZONE,
