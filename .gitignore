@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# gerado por scripts/copy-pdf-worker.mjs (postinstall) a partir do pdfjs-dist instalado
+/public/pdf.worker.min.mjs

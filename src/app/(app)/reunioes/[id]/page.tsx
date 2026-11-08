@@ -19,7 +19,7 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
   const { data: meeting } = await supabase
     .from("meetings")
     .select(
-      "id, title, status, started_at, duration_seconds, meeting_type, client_name, participants, context"
+      "id, title, status, started_at, duration_seconds, meeting_type, client_name, participants, context, project_id"
     )
     .eq("id", id)
     .maybeSingle();
@@ -27,6 +27,10 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
   if (!meeting) {
     notFound();
   }
+
+  const { data: project } = meeting.project_id
+    ? await supabase.from("projects").select("id, name").eq("id", meeting.project_id).maybeSingle()
+    : { data: null };
 
   const { data: chunks } = await supabase
     .from("meeting_chunks")
@@ -84,8 +88,19 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
           client_name: meeting.client_name ?? "",
           participants: participants.success ? participants.data : [],
           context: meeting.context ?? "",
+          project_id: meeting.project_id,
         }}
       />
+
+      {project && (
+        <Link
+          href={`/projetos/${project.id}`}
+          className="flex min-h-11 items-center justify-between rounded-xl border border-border bg-surface px-4 text-sm text-text"
+        >
+          <span>Projeto</span>
+          <span className="font-semibold text-accent">{project.name}</span>
+        </Link>
+      )}
 
       {previousMeetings && previousMeetings.length > 0 && (
         <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">

@@ -34,25 +34,36 @@ export type MeetingSuggestion = {
   title: string;
   startedAt: string;
   clientName: string | null;
+  projectId?: string | null;
 };
 
 /**
  * Reordena as reuniões anteriores sugeridas em "Partir de reuniões anteriores":
- * as do mesmo cliente primeiro (mantendo a ordem relativa — já vêm da mais
- * recente para a mais antiga), depois as demais.
+ * primeiro as do mesmo projeto, depois as do mesmo cliente, depois as demais —
+ * mantendo a ordem relativa dentro de cada grupo (já vêm da mais recente para a
+ * mais antiga).
  */
 export function sortMeetingSuggestions(
   meetings: MeetingSuggestion[],
-  currentClientName: string | null | undefined
+  filters: { clientName?: string | null; projectId?: string | null }
 ): MeetingSuggestion[] {
-  const normalized = currentClientName?.trim().toLowerCase();
-  if (!normalized) return meetings;
+  const normalizedClient = filters.clientName?.trim().toLowerCase();
+  const projectId = filters.projectId;
 
-  const matches: MeetingSuggestion[] = [];
+  if (!normalizedClient && !projectId) return meetings;
+
+  const sameProject: MeetingSuggestion[] = [];
+  const sameClient: MeetingSuggestion[] = [];
   const others: MeetingSuggestion[] = [];
+
   for (const meeting of meetings) {
-    const isMatch = meeting.clientName?.trim().toLowerCase() === normalized;
-    (isMatch ? matches : others).push(meeting);
+    if (projectId && meeting.projectId === projectId) {
+      sameProject.push(meeting);
+    } else if (normalizedClient && meeting.clientName?.trim().toLowerCase() === normalizedClient) {
+      sameClient.push(meeting);
+    } else {
+      others.push(meeting);
+    }
   }
-  return [...matches, ...others];
+  return [...sameProject, ...sameClient, ...others];
 }

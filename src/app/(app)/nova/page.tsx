@@ -65,6 +65,7 @@ function NovaReuniaoContent() {
           participants: value.participants,
           context: value.context.trim() || undefined,
           previous_meeting_ids: previousMeetingIds.length > 0 ? previousMeetingIds : undefined,
+          project_id: value.project_id ?? undefined,
         }),
       });
       if (!response.ok) throw new Error("falha ao criar reunião");

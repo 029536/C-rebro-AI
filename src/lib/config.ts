@@ -32,3 +32,6 @@ export const PROJECT_MAX_RELEVANT_FILES = 12;
 
 /** Tamanho máximo (em caracteres) do mapa do repositório de um projeto. */
 export const PROJECT_REPO_MAP_MAX_CHARS = 12_000;
+
+/** Quantos arquivos/documentos resumir por chamada do `CLAUDE_FAST_MODEL` (lotes retomáveis). */
+export const PROJECT_SUMMARIZE_BATCH_SIZE = 10;

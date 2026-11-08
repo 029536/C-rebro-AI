@@ -13,8 +13,6 @@ const createMeetingSchema = z.object({
   // Reuniões das quais esta "parte" (memória entre reuniões, Fase 2.8). Só vira
   // ligação de verdade para as que realmente pertencem ao usuário (RLS cuida disso).
   previous_meeting_ids: z.array(z.uuid()).max(20).optional(),
-  // project_id é aceito desde já (ver PROMPT_INICIAL.md), mas a coluna só existe
-  // a partir da migração 0007 (Fase 3.6); por ora o valor é ignorado.
   project_id: z.uuid().optional(),
 });
 
@@ -23,7 +21,7 @@ export async function GET() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("meetings")
-    .select("id, title, started_at, client_name")
+    .select("id, title, started_at, client_name, project_id")
     .in("status", ["ready", "analyzed"])
     .is("archived_at", null)
     .order("started_at", { ascending: false })
@@ -45,6 +43,18 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
+
+  // Só aceita o project_id se o projeto for mesmo do usuário (RLS decide isso sozinha).
+  let projectId: string | null = null;
+  if (parsed.data.project_id) {
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", parsed.data.project_id)
+      .maybeSingle();
+    projectId = project?.id ?? null;
+  }
+
   const { data, error } = await supabase
     .from("meetings")
     .insert({
@@ -53,6 +63,7 @@ export async function POST(request: Request) {
       client_name: parsed.data.client_name || null,
       participants: parsed.data.participants ?? [],
       context: parsed.data.context || null,
+      project_id: projectId,
     })
     .select("id")
     .single();

@@ -11,6 +11,7 @@ export type MeetingSetupValue = {
   client_name: string;
   participants: Participant[];
   context: string;
+  project_id: string | null;
 };
 
 const EMPTY_VALUE: MeetingSetupValue = {
@@ -19,7 +20,10 @@ const EMPTY_VALUE: MeetingSetupValue = {
   client_name: "",
   participants: [],
   context: "",
+  project_id: null,
 };
+
+type ProjectOption = { id: string; name: string };
 
 type PreparedMeeting = {
   meeting_type: "client" | "internal" | null;
@@ -51,25 +55,53 @@ export function MeetingSetupForm({
 
   const [previousMeetings, setPreviousMeetings] = useState<MeetingSuggestion[]>([]);
   const [selectedPreviousIds, setSelectedPreviousIds] = useState<string[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
 
   useEffect(() => {
     if (!showPreviousMeetings) return;
     let cancelled = false;
     fetch("/api/meetings")
       .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((data: { meetings: { id: string; title: string; started_at: string; client_name: string | null }[] }) => {
-        if (cancelled) return;
-        setPreviousMeetings(
-          data.meetings.map((meeting) => ({
-            id: meeting.id,
-            title: meeting.title,
-            startedAt: meeting.started_at,
-            clientName: meeting.client_name,
-          }))
-        );
-      })
+      .then(
+        (data: {
+          meetings: {
+            id: string;
+            title: string;
+            started_at: string;
+            client_name: string | null;
+            project_id: string | null;
+          }[];
+        }) => {
+          if (cancelled) return;
+          setPreviousMeetings(
+            data.meetings.map((meeting) => ({
+              id: meeting.id,
+              title: meeting.title,
+              startedAt: meeting.started_at,
+              clientName: meeting.client_name,
+              projectId: meeting.project_id,
+            }))
+          );
+        }
+      )
       .catch(() => {
         // Sem a lista, o seletor só fica vazio — não é motivo para travar o formulário.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showPreviousMeetings]);
+
+  useEffect(() => {
+    if (!showPreviousMeetings) return;
+    let cancelled = false;
+    fetch("/api/projects")
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { projects: { id: string; name: string }[] }) => {
+        if (!cancelled) setProjects(data.projects.map((project) => ({ id: project.id, name: project.name })));
+      })
+      .catch(() => {
+        // Sem a lista, o seletor só fica vazio.
       });
     return () => {
       cancelled = true;
@@ -122,6 +154,7 @@ export function MeetingSetupForm({
         return;
       }
       setValue((prev) => ({
+        ...prev,
         meeting_type: data.meeting_type ?? prev.meeting_type,
         title: data.title ?? prev.title,
         client_name: data.client_name ?? prev.client_name,
@@ -289,7 +322,10 @@ export function MeetingSetupForm({
             O Claude usa a ata, o parecer e o andamento delas para não repetir o que já foi dito.
           </p>
           <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-2">
-            {sortMeetingSuggestions(previousMeetings, value.client_name).map((meeting) => (
+            {sortMeetingSuggestions(previousMeetings, {
+              clientName: value.client_name,
+              projectId: value.project_id,
+            }).map((meeting) => (
               <label
                 key={meeting.id}
                 className="flex min-h-11 items-center gap-3 rounded-md px-2 text-sm text-text"
@@ -308,15 +344,29 @@ export function MeetingSetupForm({
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-text">Projeto de código (opcional)</span>
-        <select
-          disabled
-          className="h-12 rounded-lg border border-border bg-surface px-3 text-base text-text-secondary"
-        >
-          <option>Nenhum projeto disponível ainda (chega na Fase 3.6)</option>
-        </select>
-      </div>
+      {showPreviousMeetings && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="project" className="text-sm font-medium text-text">
+            Projeto de código (opcional)
+          </label>
+          <select
+            id="project"
+            value={value.project_id ?? ""}
+            onChange={(event) => updateField("project_id", event.target.value || null)}
+            disabled={projects.length === 0}
+            className="h-12 rounded-lg border border-border bg-surface px-3 text-base text-text disabled:text-text-secondary"
+          >
+            <option value="">
+              {projects.length === 0 ? "Nenhum projeto importado ainda" : "Nenhum"}
+            </option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <button
         type="submit"

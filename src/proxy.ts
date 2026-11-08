@@ -8,6 +8,9 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // .mjs cobre public/pdf.worker.min.mjs (worker do pdf.js): é estático, não
+    // precisa do custo de checar sessão a cada carga, e evita qualquer problema
+    // de cookie não ir junto na requisição que o navegador faz para o Worker.
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs)$).*)",
   ],
 };
