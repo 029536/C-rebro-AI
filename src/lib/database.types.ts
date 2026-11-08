@@ -1,6 +1,6 @@
-// Gerado à mão a partir das migrações 0001 e 0002 (sem acesso a Docker/Supabase CLI local
-// neste ambiente). Depois que o projeto Supabase existir e as migrações forem aplicadas,
-// regenere com:
+// Gerado à mão a partir das migrações 0001, 0002 e 0005 (sem acesso a Docker/Supabase
+// CLI local neste ambiente). Depois que o projeto Supabase existir e as migrações forem
+// aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -14,6 +14,11 @@ export type Database = {
           owner_id: string;
           title: string;
           status: "recording" | "ready" | "analyzed";
+          meeting_type: "client" | "internal";
+          client_name: string | null;
+          participants: Json;
+          context: string | null;
+          archived_at: string | null;
           started_at: string;
           ended_at: string | null;
           duration_seconds: number | null;
@@ -26,6 +31,11 @@ export type Database = {
           owner_id?: string;
           title: string;
           status?: "recording" | "ready" | "analyzed";
+          meeting_type?: "client" | "internal";
+          client_name?: string | null;
+          participants?: Json;
+          context?: string | null;
+          archived_at?: string | null;
           started_at?: string;
           ended_at?: string | null;
           duration_seconds?: number | null;

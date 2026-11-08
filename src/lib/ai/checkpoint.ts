@@ -6,6 +6,7 @@ const MAX_TOKENS = 1_200;
 
 export async function generateCheckpoint(params: {
   companyContext: string;
+  meetingContext?: string;
   previousSummary: string | null;
   transcript: string;
 }): Promise<string> {
@@ -16,7 +17,7 @@ export async function generateCheckpoint(params: {
   const message = await getAnthropicClient().messages.create({
     model: process.env.CLAUDE_FAST_MODEL || "claude-haiku-5-5",
     max_tokens: MAX_TOKENS,
-    system: checkpointSystemPrompt(params.companyContext),
+    system: checkpointSystemPrompt(params.companyContext, params.meetingContext),
     messages: [
       {
         role: "user",

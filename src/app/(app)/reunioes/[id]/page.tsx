@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MeetingActions } from "@/components/MeetingActions";
+import { MeetingSetupSection } from "@/components/MeetingSetupSection";
 import { formatDateTime, formatDuration, formatTime } from "@/lib/format";
+import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
 
 const STATUS_LABEL: Record<string, string> = {
   recording: "Gravando ou interrompida",
-  ready: "Pronta",
+  ready: "Gravada",
   analyzed: "Com parecer",
 };
 
@@ -16,7 +18,9 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
 
   const { data: meeting } = await supabase
     .from("meetings")
-    .select("id, title, status, started_at, duration_seconds")
+    .select(
+      "id, title, status, started_at, duration_seconds, meeting_type, client_name, participants, context"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -31,6 +35,7 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
     .order("idx", { ascending: true });
 
   const isRecording = meeting.status === "recording";
+  const participants = participantsSchema.safeParse(meeting.participants);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
@@ -56,6 +61,17 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
         )}
         <MeetingActions meetingId={id} showFinishWithoutRecording={isRecording} afterDelete="/" />
       </div>
+
+      <MeetingSetupSection
+        meetingId={id}
+        value={{
+          meeting_type: meeting.meeting_type,
+          title: meeting.title,
+          client_name: meeting.client_name ?? "",
+          participants: participants.success ? participants.data : [],
+          context: meeting.context ?? "",
+        }}
+      />
 
       <div className="flex flex-1 flex-col gap-2">
         {chunks && chunks.length > 0 ? (

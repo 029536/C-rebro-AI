@@ -1,10 +1,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { Database } from "@/lib/database.types";
+import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
+
+type MeetingUpdate = Database["public"]["Tables"]["meetings"]["Update"];
 
 const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("finish") }),
   z.object({ action: z.literal("resume") }),
+  z.object({ action: z.literal("archive") }),
+  z.object({ action: z.literal("unarchive") }),
+  z.object({
+    action: z.literal("update_setup"),
+    meeting_type: z.enum(["client", "internal"]).optional(),
+    title: z.string().trim().min(1).max(200).optional(),
+    client_name: z.string().trim().max(200).nullable().optional(),
+    participants: participantsSchema.optional(),
+    context: z.string().trim().max(2000).nullable().optional(),
+  }),
 ]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -46,6 +60,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       part_no: (latestChunk?.part_no ?? 0) + 1,
       next_idx: (latestChunk?.idx ?? -1) + 1,
     });
+  }
+
+  if (parsed.data.action === "archive" || parsed.data.action === "unarchive") {
+    const { error: updateError } = await supabase
+      .from("meetings")
+      .update({ archived_at: parsed.data.action === "archive" ? new Date().toISOString() : null })
+      .eq("id", id);
+
+    if (updateError) {
+      return NextResponse.json({ error: "Não foi possível atualizar a reunião." }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (parsed.data.action === "update_setup") {
+    const fields = parsed.data;
+    const update: MeetingUpdate = {};
+    if (fields.meeting_type !== undefined) update.meeting_type = fields.meeting_type;
+    if (fields.title !== undefined) update.title = fields.title;
+    if (fields.client_name !== undefined) update.client_name = fields.client_name;
+    if (fields.participants !== undefined) update.participants = fields.participants;
+    if (fields.context !== undefined) update.context = fields.context;
+
+    const { error: updateError } = await supabase.from("meetings").update(update).eq("id", id);
+    if (updateError) {
+      return NextResponse.json({ error: "Não foi possível salvar as alterações." }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true });
   }
 
   // action === "finish" (também usado por "Encerrar sem gravar mais", numa reunião

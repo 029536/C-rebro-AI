@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AnthropicKeyMissingError } from "@/lib/ai/anthropic";
 import { generateCheckpoint } from "@/lib/ai/checkpoint";
+import { buildMeetingContextBlock } from "@/lib/ai/prompts";
+import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
@@ -41,7 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Essa parte ainda não tem trechos." }, { status: 409 });
   }
 
-  const [{ data: previousCheckpoint }, { data: companyContext }] = await Promise.all([
+  const [{ data: previousCheckpoint }, { data: companyContext }, { data: meeting }] = await Promise.all([
     supabase
       .from("meeting_checkpoints")
       .select("summary")
@@ -49,6 +51,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq("part_no", partNo - 1)
       .maybeSingle(),
     supabase.from("company_context").select("context").maybeSingle(),
+    supabase
+      .from("meetings")
+      .select("meeting_type, client_name, participants, context")
+      .eq("id", meetingId)
+      .maybeSingle(),
   ]);
 
   const transcript = chunks
@@ -56,10 +63,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .filter(Boolean)
     .join(" ");
 
+  const participants = participantsSchema.safeParse(meeting?.participants ?? []);
+  const meetingContext = buildMeetingContextBlock({
+    meetingType: meeting?.meeting_type,
+    clientName: meeting?.client_name,
+    participants: participants.success ? participants.data : [],
+    context: meeting?.context,
+  });
+
   let summary: string;
   try {
     summary = await generateCheckpoint({
       companyContext: companyContext?.context ?? "",
+      meetingContext: meetingContext || undefined,
       previousSummary: previousCheckpoint?.summary ?? null,
       transcript,
     });

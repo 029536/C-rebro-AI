@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AUDIO_CHUNK_MAX_BYTES } from "@/lib/config";
-import { buildWhisperPrompt, transcribeAudio } from "@/lib/ai/transcribe";
+import { buildMeetingVocabulary, buildWhisperPrompt, transcribeAudio } from "@/lib/ai/transcribe";
 import { computeNextPartNo } from "@/lib/meetings";
+import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
 
 // Transcrever um trecho de 3 minutos é rápido; 60s é folga de sobra mesmo no plano Hobby
@@ -70,22 +71,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
   }
 
-  const [{ data: previousChunk }, { data: companyContext }, { data: latestChunk }] = await Promise.all([
-    supabase
-      .from("meeting_chunks")
-      .select("transcript")
-      .eq("meeting_id", meetingId)
-      .eq("idx", idx - 1)
-      .maybeSingle(),
-    supabase.from("company_context").select("vocabulary").maybeSingle(),
-    supabase
-      .from("meeting_chunks")
-      .select("part_no")
-      .eq("meeting_id", meetingId)
-      .order("idx", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const [{ data: previousChunk }, { data: companyContext }, { data: latestChunk }, { data: meeting }] =
+    await Promise.all([
+      supabase
+        .from("meeting_chunks")
+        .select("transcript")
+        .eq("meeting_id", meetingId)
+        .eq("idx", idx - 1)
+        .maybeSingle(),
+      supabase.from("company_context").select("vocabulary").maybeSingle(),
+      supabase
+        .from("meeting_chunks")
+        .select("part_no")
+        .eq("meeting_id", meetingId)
+        .order("idx", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.from("meetings").select("client_name, participants, context").eq("id", meetingId).maybeSingle(),
+    ]);
 
   const currentPartNo = latestChunk?.part_no ?? 1;
   const { data: partChunks } = await supabase
@@ -105,7 +108,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     forceNewPartAtLeast: forcePartNo,
   });
 
-  const prompt = buildWhisperPrompt(companyContext?.vocabulary ?? "", previousChunk?.transcript ?? "");
+  const participants = participantsSchema.safeParse(meeting?.participants ?? []);
+  const vocabulary = buildMeetingVocabulary({
+    companyVocabulary: companyContext?.vocabulary ?? "",
+    clientName: meeting?.client_name,
+    participants: participants.success ? participants.data : [],
+    context: meeting?.context,
+  });
+  const prompt = buildWhisperPrompt(vocabulary, previousChunk?.transcript ?? "");
 
   let transcript: string;
   try {
