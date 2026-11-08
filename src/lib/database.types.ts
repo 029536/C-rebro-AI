@@ -1,4 +1,4 @@
-// Gerado à mão a partir das migrações 0001, 0002 e 0005 (sem acesso a Docker/Supabase
+// Gerado à mão a partir das migrações 0001, 0002, 0005 e 0006 (sem acesso a Docker/Supabase
 // CLI local neste ambiente). Depois que o projeto Supabase existir e as migrações forem
 // aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
@@ -186,6 +186,35 @@ export type Database = {
           {
             foreignKeyName: "chat_messages_meeting_id_fkey";
             columns: ["meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meeting_links: {
+        Row: {
+          meeting_id: string;
+          previous_meeting_id: string;
+          created_at: string;
+        };
+        Insert: {
+          meeting_id: string;
+          previous_meeting_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meeting_links"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meeting_links_meeting_id_fkey";
+            columns: ["meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meeting_links_previous_meeting_id_fkey";
+            columns: ["previous_meeting_id"];
             isOneToOne: false;
             referencedRelation: "meetings";
             referencedColumns: ["id"];

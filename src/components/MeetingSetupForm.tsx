@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { sortMeetingSuggestions, type MeetingSuggestion } from "@/lib/meetings";
 import type { Participant } from "@/lib/participants";
+import { formatDate } from "@/lib/format";
 
 export type MeetingSetupValue = {
   meeting_type: "client" | "internal";
@@ -32,11 +34,13 @@ export function MeetingSetupForm({
   onSubmit,
   submitLabel,
   showAiAssist = false,
+  showPreviousMeetings = false,
 }: {
   initialValue?: Partial<MeetingSetupValue>;
-  onSubmit: (value: MeetingSetupValue) => Promise<void>;
+  onSubmit: (value: MeetingSetupValue, previousMeetingIds: string[]) => Promise<void>;
   submitLabel: string;
   showAiAssist?: boolean;
+  showPreviousMeetings?: boolean;
 }) {
   const [value, setValue] = useState<MeetingSetupValue>({ ...EMPTY_VALUE, ...initialValue });
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +48,39 @@ export function MeetingSetupForm({
   const [aiText, setAiText] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const [previousMeetings, setPreviousMeetings] = useState<MeetingSuggestion[]>([]);
+  const [selectedPreviousIds, setSelectedPreviousIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!showPreviousMeetings) return;
+    let cancelled = false;
+    fetch("/api/meetings")
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { meetings: { id: string; title: string; started_at: string; client_name: string | null }[] }) => {
+        if (cancelled) return;
+        setPreviousMeetings(
+          data.meetings.map((meeting) => ({
+            id: meeting.id,
+            title: meeting.title,
+            startedAt: meeting.started_at,
+            clientName: meeting.client_name,
+          }))
+        );
+      })
+      .catch(() => {
+        // Sem a lista, o seletor só fica vazio — não é motivo para travar o formulário.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showPreviousMeetings]);
+
+  function togglePreviousMeeting(id: string) {
+    setSelectedPreviousIds((prev) =>
+      prev.includes(id) ? prev.filter((existing) => existing !== id) : [...prev, id]
+    );
+  }
 
   function updateField<K extends keyof MeetingSetupValue>(key: K, fieldValue: MeetingSetupValue[K]) {
     setValue((prev) => ({ ...prev, [key]: fieldValue }));
@@ -102,12 +139,15 @@ export function MeetingSetupForm({
     event.preventDefault();
     setSubmitting(true);
     try {
-      await onSubmit({
-        ...value,
-        participants: value.participants
-          .map((participant) => ({ name: participant.name.trim(), role: participant.role?.trim() }))
-          .filter((participant) => participant.name.length > 0),
-      });
+      await onSubmit(
+        {
+          ...value,
+          participants: value.participants
+            .map((participant) => ({ name: participant.name.trim(), role: participant.role?.trim() }))
+            .filter((participant) => participant.name.length > 0),
+        },
+        selectedPreviousIds
+      );
     } finally {
       setSubmitting(false);
     }
@@ -242,13 +282,39 @@ export function MeetingSetupForm({
         />
       </div>
 
+      {showPreviousMeetings && previousMeetings.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-text">Partir de reuniões anteriores (opcional)</span>
+          <p className="text-xs text-text-secondary">
+            O Claude usa a ata, o parecer e o andamento delas para não repetir o que já foi dito.
+          </p>
+          <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-2">
+            {sortMeetingSuggestions(previousMeetings, value.client_name).map((meeting) => (
+              <label
+                key={meeting.id}
+                className="flex min-h-11 items-center gap-3 rounded-md px-2 text-sm text-text"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedPreviousIds.includes(meeting.id)}
+                  onChange={() => togglePreviousMeeting(meeting.id)}
+                  className="h-5 w-5"
+                />
+                <span className="flex-1">{meeting.title}</span>
+                <span className="text-xs text-text-secondary">{formatDate(meeting.startedAt)}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-text">Projeto de código (opcional)</span>
         <select
           disabled
           className="h-12 rounded-lg border border-border bg-surface px-3 text-base text-text-secondary"
         >
-          <option>Nenhum projeto disponível ainda (chega na Fase 7)</option>
+          <option>Nenhum projeto disponível ainda (chega na Fase 3.6)</option>
         </select>
       </div>
 

@@ -16,6 +16,7 @@ export function MeetingSetupSection({
   const [editing, setEditing] = useState(false);
 
   async function save(newValue: MeetingSetupValue) {
+    // Reuniões anteriores só se escolhem na criação (Fase 2.8); editar depois não as toca.
     await fetch(`/api/meetings/${meetingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

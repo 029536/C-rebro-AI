@@ -53,7 +53,7 @@ function NovaReuniaoContent() {
     };
   }, [resumeMeetingId]);
 
-  async function createMeeting(value: MeetingSetupValue) {
+  async function createMeeting(value: MeetingSetupValue, previousMeetingIds: string[]) {
     try {
       const response = await fetch("/api/meetings", {
         method: "POST",
@@ -64,6 +64,7 @@ function NovaReuniaoContent() {
           client_name: value.client_name.trim() || undefined,
           participants: value.participants,
           context: value.context.trim() || undefined,
+          previous_meeting_ids: previousMeetingIds.length > 0 ? previousMeetingIds : undefined,
         }),
       });
       if (!response.ok) throw new Error("falha ao criar reunião");
@@ -88,7 +89,12 @@ function NovaReuniaoContent() {
 
   if (!session) {
     return (
-      <MeetingSetupForm onSubmit={createMeeting} submitLabel="Iniciar gravação" showAiAssist />
+      <MeetingSetupForm
+        onSubmit={createMeeting}
+        submitLabel="Iniciar gravação"
+        showAiAssist
+        showPreviousMeetings
+      />
     );
   }
 

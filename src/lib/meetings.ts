@@ -28,3 +28,31 @@ export function computeNextPartNo(params: {
   const closedPartNo = partNo > params.currentPartNo ? params.currentPartNo : null;
   return { partNo, closedPartNo };
 }
+
+export type MeetingSuggestion = {
+  id: string;
+  title: string;
+  startedAt: string;
+  clientName: string | null;
+};
+
+/**
+ * Reordena as reuniões anteriores sugeridas em "Partir de reuniões anteriores":
+ * as do mesmo cliente primeiro (mantendo a ordem relativa — já vêm da mais
+ * recente para a mais antiga), depois as demais.
+ */
+export function sortMeetingSuggestions(
+  meetings: MeetingSuggestion[],
+  currentClientName: string | null | undefined
+): MeetingSuggestion[] {
+  const normalized = currentClientName?.trim().toLowerCase();
+  if (!normalized) return meetings;
+
+  const matches: MeetingSuggestion[] = [];
+  const others: MeetingSuggestion[] = [];
+  for (const meeting of meetings) {
+    const isMatch = meeting.clientName?.trim().toLowerCase() === normalized;
+    (isMatch ? matches : others).push(meeting);
+  }
+  return [...matches, ...others];
+}

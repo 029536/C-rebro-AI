@@ -34,6 +34,20 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
     .eq("meeting_id", id)
     .order("idx", { ascending: true });
 
+  const { data: links } = await supabase
+    .from("meeting_links")
+    .select("previous_meeting_id")
+    .eq("meeting_id", id);
+  const previousMeetingIds = (links ?? []).map((link) => link.previous_meeting_id);
+  const { data: previousMeetings } =
+    previousMeetingIds.length > 0
+      ? await supabase
+          .from("meetings")
+          .select("id, title, started_at")
+          .in("id", previousMeetingIds)
+          .order("started_at", { ascending: false })
+      : { data: [] as { id: string; title: string; started_at: string }[] };
+
   const isRecording = meeting.status === "recording";
   const participants = participantsSchema.safeParse(meeting.participants);
 
@@ -72,6 +86,22 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
           context: meeting.context ?? "",
         }}
       />
+
+      {previousMeetings && previousMeetings.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
+          <span className="text-sm font-semibold text-text-secondary">Parte de</span>
+          {previousMeetings.map((previous) => (
+            <Link
+              key={previous.id}
+              href={`/reunioes/${previous.id}`}
+              className="flex min-h-11 items-center justify-between text-text"
+            >
+              <span>{previous.title}</span>
+              <span className="text-xs text-text-secondary">{formatDateTime(previous.started_at)}</span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-1 flex-col gap-2">
         {chunks && chunks.length > 0 ? (
