@@ -67,3 +67,51 @@ export function sortMeetingSuggestions(
   }
   return [...sameProject, ...sameClient, ...others];
 }
+
+export type SessionEdge = { meetingId: string; previousMeetingId: string };
+
+/**
+ * Agrupa reuniões ligadas por `link_type = 'session'` (continuação da mesma
+ * conversa) em componentes conexos. Cada grupo é uma lista de ids na mesma
+ * sessão; o chamador decide qual representa o cartão (normalmente a mais
+ * recente) e usa `group.length` para o rótulo "N sessões".
+ */
+export function groupMeetingsBySession(
+  meetingIds: string[],
+  sessionEdges: SessionEdge[]
+): string[][] {
+  const parent = new Map<string, string>();
+
+  function find(x: string): string {
+    if (!parent.has(x)) parent.set(x, x);
+    let root = x;
+    while (parent.get(root) !== root) {
+      root = parent.get(root)!;
+    }
+    parent.set(x, root);
+    return root;
+  }
+
+  function union(a: string, b: string) {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootA, rootB);
+  }
+
+  const knownIds = new Set(meetingIds);
+  for (const id of meetingIds) find(id);
+  for (const edge of sessionEdges) {
+    if (knownIds.has(edge.meetingId) && knownIds.has(edge.previousMeetingId)) {
+      union(edge.meetingId, edge.previousMeetingId);
+    }
+  }
+
+  const groups = new Map<string, string[]>();
+  for (const id of meetingIds) {
+    const root = find(id);
+    const list = groups.get(root) ?? [];
+    list.push(id);
+    groups.set(root, list);
+  }
+  return [...groups.values()];
+}
