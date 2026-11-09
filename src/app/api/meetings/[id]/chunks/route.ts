@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AUDIO_CHUNK_MAX_BYTES } from "@/lib/config";
 import { buildMeetingVocabulary, buildWhisperPrompt, transcribeAudio } from "@/lib/ai/transcribe";
+import { describeOpenAIError } from "@/lib/ai/openai";
 import { computeNextPartNo } from "@/lib/meetings";
 import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
@@ -120,8 +121,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let transcript: string;
   try {
     transcript = await transcribeAudio(audio, prompt);
-  } catch {
-    return NextResponse.json({ error: "Falha ao transcrever o áudio." }, { status: 502 });
+  } catch (error) {
+    return NextResponse.json({ error: describeOpenAIError(error) }, { status: 502 });
   }
 
   const { data: inserted, error: insertError } = await supabase

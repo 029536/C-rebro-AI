@@ -1,12 +1,13 @@
 import type { Participant } from "@/lib/participants";
 import { minutesContentSchema, type MinutesContent } from "@/lib/minutes/schema";
 import { getAnthropicClient } from "./anthropic";
+import { ExpectedAIError } from "./env";
 import { MINUTES_TOOL_NAME, minutesSystemPrompt } from "./prompts";
 
 const MAX_TOKENS = 8_000;
 
 /** O Claude respondeu, mas não no formato esperado — não é falta de chave nem erro de rede. */
-export class MinutesGenerationError extends Error {}
+export class MinutesGenerationError extends ExpectedAIError {}
 
 const MOCK_CONTENT: MinutesContent = {
   titulo: "Reunião (ata simulada — MOCK_AI=1)",

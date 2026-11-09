@@ -1,6 +1,6 @@
-import { AnthropicKeyMissingError, describeAnthropicError } from "@/lib/ai/anthropic";
+import { describeAnthropicError, statusForAnthropicError } from "@/lib/ai/anthropic";
 import { buildContext } from "@/lib/ai/context";
-import { generateMinutesContent, MinutesGenerationError } from "@/lib/ai/minutes";
+import { generateMinutesContent } from "@/lib/ai/minutes";
 import { buildMeetingContextBlock } from "@/lib/ai/prompts";
 import { formatISODate, formatTime } from "@/lib/format";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
@@ -151,11 +151,6 @@ export async function generateMeetingMinutes(
     }
     return { ok: true, minutes: updated };
   } catch (error) {
-    if (error instanceof AnthropicKeyMissingError) {
-      return fail(503, error.message);
-    }
-    const message =
-      error instanceof MinutesGenerationError ? error.message : describeAnthropicError(error);
-    return fail(502, message);
+    return fail(statusForAnthropicError(error), describeAnthropicError(error));
   }
 }

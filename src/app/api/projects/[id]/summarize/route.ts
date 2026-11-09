@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AnthropicKeyMissingError } from "@/lib/ai/anthropic";
+import { describeAnthropicError, statusForAnthropicError } from "@/lib/ai/anthropic";
 import { generateDocumentSummaries, generateFileSummaries } from "@/lib/ai/summarize";
 import { PROJECT_SUMMARIZE_BATCH_SIZE } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
@@ -33,10 +33,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       generateDocumentSummaries(documents ?? []),
     ]);
   } catch (error) {
-    if (error instanceof AnthropicKeyMissingError) {
-      return NextResponse.json({ error: error.message }, { status: 503 });
-    }
-    return NextResponse.json({ error: "Falha ao resumir." }, { status: 502 });
+    return NextResponse.json(
+      { error: describeAnthropicError(error) },
+      { status: statusForAnthropicError(error) }
+    );
   }
 
   await Promise.all([

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { AnthropicKeyMissingError } from "@/lib/ai/anthropic";
+import { describeAnthropicError, statusForAnthropicError } from "@/lib/ai/anthropic";
 import { generateCheckpoint } from "@/lib/ai/checkpoint";
 import { buildMeetingContextBlock } from "@/lib/ai/prompts";
 import { participantsSchema } from "@/lib/participants";
@@ -80,10 +80,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       transcript,
     });
   } catch (error) {
-    if (error instanceof AnthropicKeyMissingError) {
-      return NextResponse.json({ error: error.message }, { status: 503 });
-    }
-    return NextResponse.json({ error: "Falha ao gerar o checkpoint." }, { status: 502 });
+    return NextResponse.json(
+      { error: describeAnthropicError(error) },
+      { status: statusForAnthropicError(error) }
+    );
   }
 
   const { data: inserted, error: insertError } = await supabase

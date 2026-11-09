@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { AnthropicKeyMissingError, getAnthropicClient } from "@/lib/ai/anthropic";
+import { describeAnthropicError, getAnthropicClient, statusForAnthropicError } from "@/lib/ai/anthropic";
 import { PREPARE_MEETING_TOOL_NAME, prepareMeetingSystemPrompt } from "@/lib/ai/prompts";
 import { participantsSchema } from "@/lib/participants";
 
@@ -87,9 +87,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(parsedResult.data);
   } catch (error) {
-    if (error instanceof AnthropicKeyMissingError) {
-      return NextResponse.json({ error: error.message }, { status: 503 });
-    }
-    return NextResponse.json({ error: "Falha ao preparar a reunião com o Claude." }, { status: 502 });
+    return NextResponse.json(
+      { error: describeAnthropicError(error) },
+      { status: statusForAnthropicError(error) }
+    );
   }
 }
