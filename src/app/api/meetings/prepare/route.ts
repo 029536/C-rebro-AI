@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { describeAnthropicError, getAnthropicClient, statusForAnthropicError } from "@/lib/ai/anthropic";
-import {
-  PREPARE_MEETING_INPUT_SCHEMA,
-  PREPARE_MEETING_TOOL_NAME,
-  prepareMeetingSystemPrompt,
-} from "@/lib/ai/prompts";
-import { toStrictInputSchema } from "@/lib/ai/strictSchema";
+import { describeAnthropicError, statusForAnthropicError } from "@/lib/ai/anthropic";
+import { PREPARE_MEETING_INPUT_SCHEMA, PREPARE_MEETING_TOOL_NAME, prepareMeetingSystemPrompt } from "@/lib/ai/prompts";
+import { callStructuredTool } from "@/lib/ai/structuredTool";
 import { participantsSchema } from "@/lib/participants";
 
 export const maxDuration = 30;
@@ -43,29 +39,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const client = getAnthropicClient();
-
-    const message = await client.messages.create({
+    const input = await callStructuredTool({
       model: process.env.CLAUDE_FAST_MODEL || "claude-haiku-5-5",
-      max_tokens: 800,
+      maxTokens: 800,
       system: prepareMeetingSystemPrompt(),
-      tools: [
-        {
-          name: PREPARE_MEETING_TOOL_NAME,
-          description:
-            "Preenche os campos do formulário de nova reunião a partir do texto do usuário.",
-          strict: true,
-          input_schema: toStrictInputSchema(PREPARE_MEETING_INPUT_SCHEMA),
-        },
-      ],
-      tool_choice: { type: "tool", name: PREPARE_MEETING_TOOL_NAME },
       messages: [{ role: "user", content: parsed.data.text }],
+      toolName: PREPARE_MEETING_TOOL_NAME,
+      toolDescription: "Preenche os campos do formulário de nova reunião a partir do texto do usuário.",
+      inputSchema: PREPARE_MEETING_INPUT_SCHEMA,
     });
 
-    const toolUse = message.content.find(
-      (block): block is Extract<typeof block, { type: "tool_use" }> => block.type === "tool_use"
-    );
-    const parsedResult = preparedMeetingSchema.safeParse(toolUse?.input);
+    const parsedResult = preparedMeetingSchema.safeParse(input);
     if (!parsedResult.success) {
       return NextResponse.json({ error: "Não consegui entender a descrição." }, { status: 502 });
     }

@@ -1,9 +1,8 @@
 import type { Participant } from "@/lib/participants";
 import { minutesContentSchema, type MinutesContent } from "@/lib/minutes/schema";
-import { getAnthropicClient } from "./anthropic";
 import { ExpectedAIError } from "./env";
 import { MINUTES_INPUT_SCHEMA, MINUTES_TOOL_NAME, minutesSystemPrompt } from "./prompts";
-import { toStrictInputSchema } from "./strictSchema";
+import { callStructuredTool } from "./structuredTool";
 
 const MAX_TOKENS = 8_000;
 
@@ -36,27 +35,17 @@ export async function generateMinutesContent(params: {
     return MOCK_CONTENT;
   }
 
-  const client = getAnthropicClient();
-  const message = await client.messages.create({
+  const input = await callStructuredTool({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
-    max_tokens: MAX_TOKENS,
+    maxTokens: MAX_TOKENS,
     system: minutesSystemPrompt(params),
-    tools: [
-      {
-        name: MINUTES_TOOL_NAME,
-        description: "Salva o conteúdo estruturado da ata da reunião.",
-        strict: true,
-        input_schema: toStrictInputSchema(MINUTES_INPUT_SCHEMA),
-      },
-    ],
-    tool_choice: { type: "tool", name: MINUTES_TOOL_NAME },
     messages: [{ role: "user", content: `<transcricao>\n${params.transcript}\n</transcricao>` }],
+    toolName: MINUTES_TOOL_NAME,
+    toolDescription: "Salva o conteúdo estruturado da ata da reunião.",
+    inputSchema: MINUTES_INPUT_SCHEMA,
   });
 
-  const toolUse = message.content.find(
-    (block): block is Extract<typeof block, { type: "tool_use" }> => block.type === "tool_use"
-  );
-  const parsed = minutesContentSchema.safeParse(toolUse?.input);
+  const parsed = minutesContentSchema.safeParse(input);
   if (!parsed.success) {
     throw new MinutesGenerationError("O Claude não devolveu a ata num formato válido.");
   }
