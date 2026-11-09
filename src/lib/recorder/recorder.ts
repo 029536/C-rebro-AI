@@ -42,6 +42,11 @@ export class MeetingRecorder {
     return this.recording;
   }
 
+  /** Para a onda sonora (AudioWave) ler o volume real do microfone — não usado na transcrição em si. */
+  get mediaStream(): MediaStream | null {
+    return this.stream;
+  }
+
   async start(): Promise<void> {
     const mime = pickRecorderMime(browserIsTypeSupported);
     if (!mime) {

@@ -1,88 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f6f2;
+  --background: #f4f1ec;
   --surface: #ffffff;
-  --border: #e7e4dc;
+  --surface-bottom: #faf9f7;
+  --border: #e6e2db;
   --text: #16181d;
   --text-secondary: #5b606b;
-  --accent: #3d4db7;
-  --accent-soft: #e8ebfa;
-  --record: #c62f3a;
-
-  /* Pré-visualização do redesenho em /design (rota temporária, atrás do
-     login) — tokens à parte, não mexem no app em produção até aprovação.
-     Remover estes e trocar os de cima pelos valores abaixo quando o
-     redesenho for aprovado e ligado aos dados reais. */
-  --design-bg: #f4f1ec;
-  --design-surface: #ffffff;
-  --design-surface-bottom: #faf9f7;
-  --design-border: #e6e2db;
-  --design-text: #16181d;
-  --design-text-secondary: #5b606b;
-  --design-accent: #3446aa;
-  --design-accent-soft: #ebeef7;
-  --design-record: #ef5b5b;
-  --design-record-soft: #ffe0dd;
-  --design-badge-ata-bg: #eceae6;
-  --design-badge-ata-text: #4a4a48;
-  --design-badge-parecer-bg: #dbefe4;
-  --design-badge-parecer-text: #2f7d55;
-  --design-badge-andamento-bg: #fce9d6;
-  --design-badge-andamento-text: #b5651d;
+  --accent: #3446aa;
+  --accent-soft: #ebeef7;
+  --record: #ef5b5b;
+  --record-soft: #ffe0dd;
+  --badge-ata-bg: #eceae6;
+  --badge-ata-text: #4a4a48;
+  --badge-parecer-bg: #dbefe4;
+  --badge-parecer-text: #2f7d55;
+  --badge-andamento-bg: #fce9d6;
+  --badge-andamento-text: #b5651d;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-surface-bottom: var(--surface-bottom);
   --color-border: var(--border);
   --color-text: var(--text);
   --color-text-secondary: var(--text-secondary);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-record: var(--record);
+  --color-record-soft: var(--record-soft);
+  --color-badge-ata-bg: var(--badge-ata-bg);
+  --color-badge-ata-text: var(--badge-ata-text);
+  --color-badge-parecer-bg: var(--badge-parecer-bg);
+  --color-badge-parecer-text: var(--badge-parecer-text);
+  --color-badge-andamento-bg: var(--badge-andamento-bg);
+  --color-badge-andamento-text: var(--badge-andamento-text);
   --font-sans: var(--font-inter);
-
-  --color-design-bg: var(--design-bg);
-  --color-design-surface: var(--design-surface);
-  --color-design-surface-bottom: var(--design-surface-bottom);
-  --color-design-border: var(--design-border);
-  --color-design-text: var(--design-text);
-  --color-design-text-secondary: var(--design-text-secondary);
-  --color-design-accent: var(--design-accent);
-  --color-design-accent-soft: var(--design-accent-soft);
-  --color-design-record: var(--design-record);
-  --color-design-record-soft: var(--design-record-soft);
-  --color-design-badge-ata-bg: var(--design-badge-ata-bg);
-  --color-design-badge-ata-text: var(--design-badge-ata-text);
-  --color-design-badge-parecer-bg: var(--design-badge-parecer-bg);
-  --color-design-badge-parecer-text: var(--design-badge-parecer-text);
-  --color-design-badge-andamento-bg: var(--design-badge-andamento-bg);
-  --color-design-badge-andamento-text: var(--design-badge-andamento-text);
 }
 
 body {
   background: var(--background);
   color: var(--text);
-}
-
-@keyframes design-wave-pulse {
-  0%,
-  100% {
-    transform: scaleY(0.3);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-
-.design-wave-bar {
-  animation: design-wave-pulse 1.1s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .design-wave-bar {
-    animation: none;
-    transform: scaleY(0.6);
-  }
 }
