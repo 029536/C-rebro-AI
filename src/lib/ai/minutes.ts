@@ -2,7 +2,8 @@ import type { Participant } from "@/lib/participants";
 import { minutesContentSchema, type MinutesContent } from "@/lib/minutes/schema";
 import { getAnthropicClient } from "./anthropic";
 import { ExpectedAIError } from "./env";
-import { MINUTES_TOOL_NAME, minutesSystemPrompt } from "./prompts";
+import { MINUTES_INPUT_SCHEMA, MINUTES_TOOL_NAME, minutesSystemPrompt } from "./prompts";
+import { toStrictInputSchema } from "./strictSchema";
 
 const MAX_TOKENS = 8_000;
 
@@ -45,62 +46,7 @@ export async function generateMinutesContent(params: {
         name: MINUTES_TOOL_NAME,
         description: "Salva o conteúdo estruturado da ata da reunião.",
         strict: true,
-        input_schema: {
-          type: "object",
-          properties: {
-            titulo: { type: "string" },
-            assuntos_discutidos: { type: "array", items: { type: "string" } },
-            decisoes: { type: "array", items: { type: "string" } },
-            responsabilidades: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  parte: { type: "string" },
-                  itens: { type: "array", items: { type: "string" } },
-                },
-                required: ["parte", "itens"],
-              },
-            },
-            acoes_futuras: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  acao: { type: "string" },
-                  responsavel: { type: ["string", "null"] },
-                  prazo: { type: ["string", "null"] },
-                },
-                required: ["acao"],
-              },
-            },
-            observacoes: { type: ["string", "null"] },
-            resumo_executivo: { type: "string" },
-            proximos_encontros: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  data: { type: ["string", "null"] },
-                  objetivo: { type: "string" },
-                },
-                required: ["objetivo"],
-              },
-            },
-            ata_formal: { type: "string" },
-          },
-          required: [
-            "titulo",
-            "assuntos_discutidos",
-            "decisoes",
-            "responsabilidades",
-            "acoes_futuras",
-            "observacoes",
-            "resumo_executivo",
-            "proximos_encontros",
-            "ata_formal",
-          ],
-        },
+        input_schema: toStrictInputSchema(MINUTES_INPUT_SCHEMA),
       },
     ],
     tool_choice: { type: "tool", name: MINUTES_TOOL_NAME },

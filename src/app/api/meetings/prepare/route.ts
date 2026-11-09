@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { describeAnthropicError, getAnthropicClient, statusForAnthropicError } from "@/lib/ai/anthropic";
-import { PREPARE_MEETING_TOOL_NAME, prepareMeetingSystemPrompt } from "@/lib/ai/prompts";
+import {
+  PREPARE_MEETING_INPUT_SCHEMA,
+  PREPARE_MEETING_TOOL_NAME,
+  prepareMeetingSystemPrompt,
+} from "@/lib/ai/prompts";
+import { toStrictInputSchema } from "@/lib/ai/strictSchema";
 import { participantsSchema } from "@/lib/participants";
 
 export const maxDuration = 30;
@@ -50,27 +55,7 @@ export async function POST(request: Request) {
           description:
             "Preenche os campos do formulário de nova reunião a partir do texto do usuário.",
           strict: true,
-          input_schema: {
-            type: "object",
-            properties: {
-              meeting_type: { type: ["string", "null"], enum: ["client", "internal", null] },
-              title: { type: ["string", "null"] },
-              client_name: { type: ["string", "null"] },
-              participants: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    role: { type: "string" },
-                  },
-                  required: ["name"],
-                },
-              },
-              context: { type: ["string", "null"] },
-            },
-            required: ["meeting_type", "title", "client_name", "participants", "context"],
-          },
+          input_schema: toStrictInputSchema(PREPARE_MEETING_INPUT_SCHEMA),
         },
       ],
       tool_choice: { type: "tool", name: PREPARE_MEETING_TOOL_NAME },
