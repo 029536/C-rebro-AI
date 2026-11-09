@@ -89,6 +89,9 @@ describe("generateMeetingMinutes — nunca vaza a chave, nem na resposta nem no 
     if (!result.ok) {
       expect(result.error).not.toContain("sk-ant-");
       expect(result.error).not.toContain("Bearer");
+      // O erro mockado não é uma APIError (é uma falha antes da API, como a
+      // real que vazou) — nunca deve virar detalhe técnico exposto na tela.
+      expect(result.errorDetail).toBeNull();
     }
 
     const errorWrites = writes.filter(
@@ -96,9 +99,10 @@ describe("generateMeetingMinutes — nunca vaza a chave, nem na resposta nem no 
     );
     expect(errorWrites.length).toBeGreaterThan(0);
     for (const write of errorWrites) {
-      const savedError = (write.payload as { error?: string }).error ?? "";
-      expect(savedError).not.toContain("sk-ant-");
-      expect(savedError).not.toContain("Bearer");
+      const payload = write.payload as { error?: string; error_detail?: string | null };
+      expect(payload.error ?? "").not.toContain("sk-ant-");
+      expect(payload.error ?? "").not.toContain("Bearer");
+      expect(payload.error_detail ?? null).toBeNull();
     }
   });
 });

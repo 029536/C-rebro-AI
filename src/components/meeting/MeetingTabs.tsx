@@ -31,6 +31,7 @@ type PreviousMeeting = { id: string; title: string; started_at: string };
 export type MinutesState = {
   status: "pending" | "generating" | "ready" | "error";
   error: string | null;
+  errorDetail: string | null;
   document: MinutesDocument | null;
 };
 
@@ -120,6 +121,9 @@ function AtaTab({
         <p className="text-text-secondary">
           {minutes?.error ?? "Esta reunião ainda não tem ata."}
         </p>
+        {minutes?.errorDetail && (
+          <p className="text-xs text-text-secondary">{minutes.errorDetail}</p>
+        )}
         <GenerateMinutesButton
           meetingId={meetingId}
           label={minutes ? "Tentar de novo" : "Gerar ata"}

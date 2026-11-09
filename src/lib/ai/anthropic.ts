@@ -83,6 +83,24 @@ export function describeAnthropicError(error: unknown): string {
   return "Falha ao chamar a Anthropic. Tente novamente em instantes.";
 }
 
+/**
+ * Detalhe técnico seguro de uma falha, para mostrar em texto pequeno abaixo
+ * da mensagem amigável (status HTTP, tipo e id da solicitação — tudo vindo
+ * da RESPOSTA da Anthropic, nunca do nosso pedido). Só existe para
+ * `APIError`: um erro antes de chegar na API (rede, cabeçalho malformado)
+ * pode ecoar o que foi enviado, então nunca tem detalhe exposto — `null`.
+ */
+export function describeAnthropicErrorDetail(error: unknown): string | null {
+  if (!(error instanceof APIError)) {
+    return null;
+  }
+  const status = error.status ?? "?";
+  const type = error.type ?? "erro";
+  const requestId = error.requestID ? ` · ${error.requestID}` : "";
+  const message = redactSecrets(error.message);
+  return `HTTP ${status} · ${type}${requestId} — ${message}`;
+}
+
 /** Extrai o texto de uma resposta do Claude (ignora blocos que não sejam texto). */
 export function extractText(content: Anthropic.ContentBlock[]): string {
   return content

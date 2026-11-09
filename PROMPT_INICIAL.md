@@ -152,7 +152,7 @@ Decisão de 2026-11-08: redesenho visual e de produto inspirado na "Lumi Ata Int
 
 ### Fase 6: plano de execução e prompts prontos
 
-- Criar a migração `0010_dev_plans.sql`: `dev_plans` e `dev_tasks` como já estava especificado, com a coluna `progress_note text not null default ''` em `dev_tasks`.
+- Criar a migração `0011_dev_plans.sql`: `dev_plans` e `dev_tasks` como já estava especificado, com a coluna `progress_note text not null default ''` em `dev_tasks`.
 - `POST /api/meetings/[id]/plan`: usa o prompt "Plano de execução" do apêndice com saída estruturada (tool use) validada por `zod`; grava `dev_plans` e `dev_tasks` (origem `final`). Inclui o mapa do repositório, os arquivos e documentos relevantes do projeto (Fase 3.6), e o Andamento das reuniões ligadas (Fase 2.8), quando houver.
 - `POST /api/meetings/[id]/tasks/draft`: cria uma tarefa rascunho (origem `draft`) a partir dos últimos minutos da conversa, para o botão **Preparar prompt deste assunto** na tela de gravação.
 - `PATCH /api/tasks/[taskId]` para status (`todo`, `doing`, `done`), nota de andamento, título e prompt editáveis.
@@ -485,7 +485,16 @@ set error = 'Falha ao transcrever o trecho. Tente novamente.'
 where error is not null;
 ```
 
-### `0010_dev_plans.sql`
+### `0010_meeting_minutes_error_detail.sql`
+
+Não é mudança de esquema relevante para o modelo de dados do app, só uma coluna de diagnóstico: `meeting_minutes.error_detail text` — status HTTP, tipo e id da solicitação devolvidos pela própria Anthropic numa falha, mostrados em texto pequeno e cinza abaixo da mensagem amigável na aba Ata (`describeAnthropicErrorDetail` em `lib/ai/anthropic.ts`; nunca preenchido para um erro que não veio como resposta da API, já que esse pode ecoar cabeçalho/chave).
+
+```sql
+alter table public.meeting_minutes
+  add column error_detail text;
+```
+
+### `0011_dev_plans.sql`
 
 ```sql
 create table public.dev_plans (
@@ -531,7 +540,7 @@ create policy dev_tasks_owner_all on public.dev_tasks
   using (public.owns_meeting(meeting_id)) with check (public.owns_meeting(meeting_id));
 ```
 
-Observação para o Claude Code: os números pulam de `0005` para `0006` porque `0003` e `0004` eram nomes reservados no plano original para projetos e plano de execução, nunca chegaram a virar arquivo, e as fases que os usam foram adiantadas/reordenadas — por isso os nomes definitivos são `0006_meeting_links.sql`, `0007_projects.sql`, `0008_meeting_minutes.sql`, `0009_redact_legacy_errors.sql` (limpeza de dado, não de esquema — ver acima) e `0010_dev_plans.sql`, nessa ordem. Siga a ordem numérica ao aplicar. Antes de aplicar qualquer migração nova, revise o SQL, aponte problemas (privilégios, índices, funções do Supabase) e proponha correções.
+Observação para o Claude Code: os números pulam de `0005` para `0006` porque `0003` e `0004` eram nomes reservados no plano original para projetos e plano de execução, nunca chegaram a virar arquivo, e as fases que os usam foram adiantadas/reordenadas — por isso os nomes definitivos são `0006_meeting_links.sql`, `0007_projects.sql`, `0008_meeting_minutes.sql`, `0009_redact_legacy_errors.sql` (limpeza de dado, não de esquema — ver acima), `0010_meeting_minutes_error_detail.sql` e `0011_dev_plans.sql`, nessa ordem. Siga a ordem numérica ao aplicar. Antes de aplicar qualquer migração nova, revise o SQL, aponte problemas (privilégios, índices, funções do Supabase) e proponha correções.
 
 ---
 

@@ -11,7 +11,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const result = await generateMeetingMinutes(supabase, meetingId);
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json(
+      { error: result.error, error_detail: result.errorDetail },
+      { status: result.status }
+    );
   }
   return NextResponse.json(result.minutes);
 }

@@ -1,6 +1,6 @@
-// Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007 e 0008 (sem acesso a
-// Docker/Supabase CLI local neste ambiente). Depois que o projeto Supabase existir e as
-// migrações forem aplicadas, regenere com:
+// Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009 e 0010 (sem
+// acesso a Docker/Supabase CLI local neste ambiente). Depois que o projeto Supabase existir
+// e as migrações forem aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -210,6 +210,7 @@ export type Database = {
           edited_ata_formal: string | null;
           status: "pending" | "generating" | "ready" | "error";
           error: string | null;
+          error_detail: string | null;
           model: string | null;
           created_at: string;
         };
@@ -220,6 +221,7 @@ export type Database = {
           edited_ata_formal?: string | null;
           status?: "pending" | "generating" | "ready" | "error";
           error?: string | null;
+          error_detail?: string | null;
           model?: string | null;
           created_at?: string;
         };

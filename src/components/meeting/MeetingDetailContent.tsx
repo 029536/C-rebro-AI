@@ -61,7 +61,7 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
 
   const { data: minutesRow } = await supabase
     .from("meeting_minutes")
-    .select("status, error, content")
+    .select("status, error, error_detail, content")
     .eq("meeting_id", meetingId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -74,6 +74,7 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
         // lib/minutes/service.ts), mas essa é a última linha de defesa antes
         // da tela — nenhum erro antigo ou futuro bug chega ao navegador cru.
         error: minutesRow.error ? redactSecrets(minutesRow.error) : null,
+        errorDetail: minutesRow.error_detail ? redactSecrets(minutesRow.error_detail) : null,
         document: minutesRow.status === "ready" ? parseMinutesDocument(minutesRow.content) : null,
       }
     : null;

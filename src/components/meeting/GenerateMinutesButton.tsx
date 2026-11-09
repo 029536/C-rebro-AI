@@ -21,6 +21,9 @@ export function GenerateMinutesButton({
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       setError(body?.error ?? "Não foi possível gerar a ata.");
+      // Mesmo numa falha, o servidor já salvou o detalhe técnico em
+      // meeting_minutes; atualiza a aba para mostrá-lo (ver AtaTab).
+      router.refresh();
       setBusy(false);
       return;
     }

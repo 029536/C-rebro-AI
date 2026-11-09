@@ -1,4 +1,8 @@
-import { describeAnthropicError, statusForAnthropicError } from "@/lib/ai/anthropic";
+import {
+  describeAnthropicError,
+  describeAnthropicErrorDetail,
+  statusForAnthropicError,
+} from "@/lib/ai/anthropic";
 import { buildContext } from "@/lib/ai/context";
 import { redactSecrets } from "@/lib/ai/env";
 import { generateMinutesContent } from "@/lib/ai/minutes";
@@ -15,7 +19,7 @@ type MeetingMinutesRow = Database["public"]["Tables"]["meeting_minutes"]["Row"];
 
 export type GenerateMinutesResult =
   | { ok: true; minutes: MeetingMinutesRow }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; errorDetail: string | null };
 
 /**
  * Gera (ou regenera) a ata de uma reunião e grava em `meeting_minutes`. Usada
@@ -35,10 +39,15 @@ export async function generateMeetingMinutes(
     .maybeSingle();
 
   if (!meeting) {
-    return { ok: false, status: 404, error: "Reunião não encontrada." };
+    return { ok: false, status: 404, error: "Reunião não encontrada.", errorDetail: null };
   }
   if (meeting.status === "recording") {
-    return { ok: false, status: 409, error: "Encerre a gravação antes de gerar a ata." };
+    return {
+      ok: false,
+      status: 409,
+      error: "Encerre a gravação antes de gerar a ata.",
+      errorDetail: null,
+    };
   }
 
   const [{ data: chunks }, { data: checkpoints }, { data: companyContext }] = await Promise.all([
@@ -53,7 +62,12 @@ export async function generateMeetingMinutes(
 
   const allChunks = chunks ?? [];
   if (allChunks.length === 0) {
-    return { ok: false, status: 409, error: "Essa reunião ainda não tem transcrição." };
+    return {
+      ok: false,
+      status: 409,
+      error: "Essa reunião ainda não tem transcrição.",
+      errorDetail: null,
+    };
   }
 
   const fullTranscript = allChunks
@@ -69,20 +83,31 @@ export async function generateMeetingMinutes(
     .select("*")
     .single();
   if (pendingError || !pendingRow) {
-    return { ok: false, status: 500, error: "Não foi possível iniciar a geração da ata." };
+    return {
+      ok: false,
+      status: 500,
+      error: "Não foi possível iniciar a geração da ata.",
+      errorDetail: null,
+    };
   }
 
-  async function fail(status: number, rawMessage: string): Promise<GenerateMinutesResult> {
-    // Segunda camada: describeAnthropicError já devolve só mensagens seguras,
-    // mas nunca grava nada no banco sem passar por aqui também — nenhum erro
-    // bruto de provedor chega a esta coluna, mesmo que um chamador futuro
-    // esqueça de usar describeAnthropicError antes de montar a mensagem.
+  async function fail(
+    status: number,
+    rawMessage: string,
+    rawDetail: string | null = null
+  ): Promise<GenerateMinutesResult> {
+    // Segunda camada: describeAnthropicError/describeAnthropicErrorDetail já
+    // devolvem só texto seguro, mas nunca grava nada no banco sem passar por
+    // aqui também — nenhum erro bruto de provedor chega a essas colunas,
+    // mesmo que um chamador futuro esqueça de usar os dois antes de montar a
+    // mensagem.
     const message = redactSecrets(rawMessage);
+    const detail = rawDetail ? redactSecrets(rawDetail) : null;
     await supabase
       .from("meeting_minutes")
-      .update({ status: "error", error: message })
+      .update({ status: "error", error: message, error_detail: detail })
       .eq("id", pendingRow!.id);
-    return { ok: false, status, error: message };
+    return { ok: false, status, error: message, errorDetail: detail };
   }
 
   // Regra D4: áudio mudo ou transcrição sem sentido não vira ata inventada.
@@ -157,6 +182,10 @@ export async function generateMeetingMinutes(
     }
     return { ok: true, minutes: updated };
   } catch (error) {
-    return fail(statusForAnthropicError(error), describeAnthropicError(error));
+    return fail(
+      statusForAnthropicError(error),
+      describeAnthropicError(error),
+      describeAnthropicErrorDetail(error)
+    );
   }
 }

@@ -1,9 +1,9 @@
 import { APIError } from "@anthropic-ai/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { describeAnthropicError } from "@/lib/ai/anthropic";
+import { describeAnthropicError, describeAnthropicErrorDetail } from "@/lib/ai/anthropic";
 
-function apiError(status: number, message = "deu erro"): APIError {
-  return new APIError(status, undefined, message, undefined);
+function apiError(status: number, message = "deu erro", type?: string): APIError {
+  return new APIError(status, undefined, message, undefined, type as ConstructorParameters<typeof APIError>[4]);
 }
 
 afterEach(() => {
@@ -55,5 +55,37 @@ describe("describeAnthropicError", () => {
   it("para algo que nem é um Error, devolve a mesma mensagem genérica segura", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(describeAnthropicError("x")).toBe("Falha ao chamar a Anthropic. Tente novamente em instantes.");
+  });
+});
+
+describe("describeAnthropicErrorDetail", () => {
+  it("para um erro vindo de verdade da API (APIError), inclui status, tipo e a mensagem da Anthropic", () => {
+    const detail = describeAnthropicErrorDetail(
+      apiError(
+        400,
+        "tools.0.custom: For 'object' type, 'additionalProperties' must be explicitly set to false",
+        "invalid_request_error"
+      )
+    );
+    expect(detail).toContain("400");
+    expect(detail).toContain("invalid_request_error");
+    expect(detail).toContain("additionalProperties");
+  });
+
+  // O detalhe só existe para erros que já vieram como resposta da Anthropic
+  // (nunca podem ecoar nosso cabeçalho/chave); um erro antes disso — rede,
+  // cabeçalho malformado — não tem detalhe nenhum exposto.
+  it("para um erro que não é da API (rede, cabeçalho malformado), não expõe detalhe nenhum", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const leaky = new Error('Headers.append: "Bearer sk-ant-api03-abc" is an invalid header value.');
+    expect(describeAnthropicErrorDetail(leaky)).toBeNull();
+  });
+
+  it("mesmo vindo de uma APIError de verdade, redige qualquer coisa parecida com uma chave na mensagem", () => {
+    const detail = describeAnthropicErrorDetail(
+      apiError(400, "algo com sk-ant-api03-abcdefghijklmnop no meio", "invalid_request_error")
+    );
+    expect(detail).not.toContain("sk-ant-");
+    expect(detail).toContain("[REDACTED]");
   });
 });
