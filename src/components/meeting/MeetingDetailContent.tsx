@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MeetingActions } from "@/components/MeetingActions";
 import { MeetingSetupSection } from "@/components/MeetingSetupSection";
 import { MeetingTabs, type MinutesState } from "@/components/meeting/MeetingTabs";
+import { redactSecrets } from "@/lib/ai/env";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
@@ -69,7 +70,10 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
   const minutes: MinutesState | null = minutesRow
     ? {
         status: minutesRow.status,
-        error: minutesRow.error,
+        // Nunca mostra o campo bruto do banco: já é gravado sanitizado (ver
+        // lib/minutes/service.ts), mas essa é a última linha de defesa antes
+        // da tela — nenhum erro antigo ou futuro bug chega ao navegador cru.
+        error: minutesRow.error ? redactSecrets(minutesRow.error) : null,
         document: minutesRow.status === "ready" ? parseMinutesDocument(minutesRow.content) : null,
       }
     : null;

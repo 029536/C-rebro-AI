@@ -152,7 +152,7 @@ Decisão de 2026-11-08: redesenho visual e de produto inspirado na "Lumi Ata Int
 
 ### Fase 6: plano de execução e prompts prontos
 
-- Criar a migração `0009_dev_plans.sql`: `dev_plans` e `dev_tasks` como já estava especificado, com a coluna `progress_note text not null default ''` em `dev_tasks`.
+- Criar a migração `0010_dev_plans.sql`: `dev_plans` e `dev_tasks` como já estava especificado, com a coluna `progress_note text not null default ''` em `dev_tasks`.
 - `POST /api/meetings/[id]/plan`: usa o prompt "Plano de execução" do apêndice com saída estruturada (tool use) validada por `zod`; grava `dev_plans` e `dev_tasks` (origem `final`). Inclui o mapa do repositório, os arquivos e documentos relevantes do projeto (Fase 3.6), e o Andamento das reuniões ligadas (Fase 2.8), quando houver.
 - `POST /api/meetings/[id]/tasks/draft`: cria uma tarefa rascunho (origem `draft`) a partir dos últimos minutos da conversa, para o botão **Preparar prompt deste assunto** na tela de gravação.
 - `PATCH /api/tasks/[taskId]` para status (`todo`, `doing`, `done`), nota de andamento, título e prompt editáveis.
@@ -471,7 +471,21 @@ alter table public.company_context
   add column letterhead text not null default '';
 ```
 
-### `0009_dev_plans.sql`
+### `0009_redact_legacy_errors.sql`
+
+Não é mudança de esquema: limpa dado já gravado antes do fix de segurança que impede erro bruto de provedor de IA de ir para o banco (ver "Como trabalhar neste projeto" / incidente de segurança). Troca `meeting_minutes.error` e `meeting_chunks.error` já preenchidos por uma mensagem genérica.
+
+```sql
+update public.meeting_minutes
+set error = 'Falha ao gerar a ata. Tente novamente.'
+where error is not null;
+
+update public.meeting_chunks
+set error = 'Falha ao transcrever o trecho. Tente novamente.'
+where error is not null;
+```
+
+### `0010_dev_plans.sql`
 
 ```sql
 create table public.dev_plans (
@@ -517,7 +531,7 @@ create policy dev_tasks_owner_all on public.dev_tasks
   using (public.owns_meeting(meeting_id)) with check (public.owns_meeting(meeting_id));
 ```
 
-Observação para o Claude Code: os números pulam de `0005` para `0006` porque `0003` e `0004` eram nomes reservados no plano original para projetos e plano de execução, nunca chegaram a virar arquivo, e as fases que os usam foram adiantadas/reordenadas — por isso os nomes definitivos são `0006_meeting_links.sql`, `0007_projects.sql`, `0008_meeting_minutes.sql` e `0009_dev_plans.sql`, nessa ordem. Siga a ordem numérica ao aplicar. Antes de aplicar qualquer migração nova, revise o SQL, aponte problemas (privilégios, índices, funções do Supabase) e proponha correções.
+Observação para o Claude Code: os números pulam de `0005` para `0006` porque `0003` e `0004` eram nomes reservados no plano original para projetos e plano de execução, nunca chegaram a virar arquivo, e as fases que os usam foram adiantadas/reordenadas — por isso os nomes definitivos são `0006_meeting_links.sql`, `0007_projects.sql`, `0008_meeting_minutes.sql`, `0009_redact_legacy_errors.sql` (limpeza de dado, não de esquema — ver acima) e `0010_dev_plans.sql`, nessa ordem. Siga a ordem numérica ao aplicar. Antes de aplicar qualquer migração nova, revise o SQL, aponte problemas (privilégios, índices, funções do Supabase) e proponha correções.
 
 ---
 

@@ -1,5 +1,6 @@
 import { describeAnthropicError, statusForAnthropicError } from "@/lib/ai/anthropic";
 import { buildContext } from "@/lib/ai/context";
+import { redactSecrets } from "@/lib/ai/env";
 import { generateMinutesContent } from "@/lib/ai/minutes";
 import { buildMeetingContextBlock } from "@/lib/ai/prompts";
 import { formatISODate, formatTime } from "@/lib/format";
@@ -71,7 +72,12 @@ export async function generateMeetingMinutes(
     return { ok: false, status: 500, error: "Não foi possível iniciar a geração da ata." };
   }
 
-  async function fail(status: number, message: string): Promise<GenerateMinutesResult> {
+  async function fail(status: number, rawMessage: string): Promise<GenerateMinutesResult> {
+    // Segunda camada: describeAnthropicError já devolve só mensagens seguras,
+    // mas nunca grava nada no banco sem passar por aqui também — nenhum erro
+    // bruto de provedor chega a esta coluna, mesmo que um chamador futuro
+    // esqueça de usar describeAnthropicError antes de montar a mensagem.
+    const message = redactSecrets(rawMessage);
     await supabase
       .from("meeting_minutes")
       .update({ status: "error", error: message })
