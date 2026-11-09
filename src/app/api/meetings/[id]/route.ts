@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { Database } from "@/lib/database.types";
+import { generateMeetingMinutes } from "@/lib/minutes/service";
 import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
+
+export const maxDuration = 120;
 
 type MeetingUpdate = Database["public"]["Tables"]["meetings"]["Update"];
 
@@ -123,6 +126,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (updateError) {
     return NextResponse.json({ error: "Não foi possível encerrar a reunião." }, { status: 500 });
   }
+
+  // Dispara a ata sozinho ao encerrar (CLAUDE.md, fluxo de dados). Não falha o
+  // "Encerrar": se a geração der erro, fica registrado em `meeting_minutes`
+  // (status "error") e a pessoa usa "Tentar de novo" na aba Ata.
+  await generateMeetingMinutes(supabase, id);
 
   return NextResponse.json({ ok: true, duration_seconds: durationSeconds });
 }

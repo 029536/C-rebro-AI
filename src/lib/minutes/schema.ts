@@ -47,3 +47,18 @@ export const minutesDocumentSchema = z.object({
 });
 
 export type MinutesDocument = z.infer<typeof minutesDocumentSchema>;
+
+/**
+ * Subconjunto que o Claude de fato preenche: tudo, menos os fatos que o
+ * servidor já conhece com certeza (data, horário, tipo, cliente,
+ * participantes — regras D1-D3) e que nunca dependem da transcrição.
+ */
+export const minutesContentSchema = minutesDocumentSchema.omit({
+  data: true,
+  horario: true,
+  tipo: true,
+  cliente_ou_empresa: true,
+  participantes: true,
+});
+
+export type MinutesContent = z.infer<typeof minutesContentSchema>;

@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MeetingActions } from "@/components/MeetingActions";
 import { MeetingSetupSection } from "@/components/MeetingSetupSection";
-import { MeetingTabs } from "@/components/meeting/MeetingTabs";
+import { MeetingTabs, type MinutesState } from "@/components/meeting/MeetingTabs";
 import { formatDateTime, formatDuration } from "@/lib/format";
-import { MOCK_MINUTES_EXAMPLE } from "@/lib/minutes/mockExample";
+import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
 
@@ -57,6 +57,22 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
           .in("id", previousMeetingIds)
           .order("started_at", { ascending: false })
       : { data: [] as { id: string; title: string; started_at: string }[] };
+
+  const { data: minutesRow } = await supabase
+    .from("meeting_minutes")
+    .select("status, error, content")
+    .eq("meeting_id", meetingId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const minutes: MinutesState | null = minutesRow
+    ? {
+        status: minutesRow.status,
+        error: minutesRow.error,
+        document: minutesRow.status === "ready" ? parseMinutesDocument(minutesRow.content) : null,
+      }
+    : null;
 
   const isRecording = meeting.status === "recording";
   const participants = participantsSchema.safeParse(meeting.participants);
@@ -113,10 +129,17 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
       )}
 
       <MeetingTabs
-        minutesExample={MOCK_MINUTES_EXAMPLE}
+        meetingId={meetingId}
+        meetingStatus={meeting.status}
+        minutes={minutes}
         chunks={chunks ?? []}
         previousMeetings={previousMeetings ?? []}
       />
     </div>
   );
+}
+
+function parseMinutesDocument(content: unknown) {
+  const parsed = minutesDocumentSchema.safeParse(content);
+  return parsed.success ? parsed.data : null;
 }

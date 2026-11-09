@@ -2,10 +2,10 @@ import type { MinutesDocument } from "@/lib/minutes/schema";
 
 export function MinutesView({
   document,
-  isExample,
+  isExample = false,
 }: {
   document: MinutesDocument;
-  isExample: boolean;
+  isExample?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3">

@@ -9,6 +9,7 @@ import {
   ScrollText,
 } from "lucide-react";
 import { useState } from "react";
+import { GenerateMinutesButton } from "@/components/meeting/GenerateMinutesButton";
 import { MinutesView } from "@/components/meeting/MinutesView";
 import { formatDateTime, formatTime } from "@/lib/format";
 import type { MinutesDocument } from "@/lib/minutes/schema";
@@ -27,13 +28,22 @@ const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
 
 type Chunk = { idx: number; part_no: number; transcript: string; created_at: string };
 type PreviousMeeting = { id: string; title: string; started_at: string };
+export type MinutesState = {
+  status: "pending" | "generating" | "ready" | "error";
+  error: string | null;
+  document: MinutesDocument | null;
+};
 
 export function MeetingTabs({
-  minutesExample,
+  meetingId,
+  meetingStatus,
+  minutes,
   chunks,
   previousMeetings,
 }: {
-  minutesExample: MinutesDocument;
+  meetingId: string;
+  meetingStatus: string;
+  minutes: MinutesState | null;
   chunks: Chunk[];
   previousMeetings: PreviousMeeting[];
 }) {
@@ -64,7 +74,9 @@ export function MeetingTabs({
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        {active === "ata" && <MinutesView document={minutesExample} isExample />}
+        {active === "ata" && (
+          <AtaTab meetingId={meetingId} meetingStatus={meetingStatus} minutes={minutes} />
+        )}
 
         {active === "parecer" && <ComingSoon text="O parecer final chega numa próxima etapa." />}
         {active === "plano" && (
@@ -83,6 +95,53 @@ export function MeetingTabs({
 
 function ComingSoon({ text }: { text: string }) {
   return <p className="text-text-secondary">{text}</p>;
+}
+
+function AtaTab({
+  meetingId,
+  meetingStatus,
+  minutes,
+}: {
+  meetingId: string;
+  meetingStatus: string;
+  minutes: MinutesState | null;
+}) {
+  if (meetingStatus === "recording") {
+    return (
+      <p className="text-text-secondary">
+        A ata é gerada automaticamente assim que a gravação for encerrada.
+      </p>
+    );
+  }
+
+  if (!minutes || minutes.status === "error") {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-text-secondary">
+          {minutes?.error ?? "Esta reunião ainda não tem ata."}
+        </p>
+        <GenerateMinutesButton
+          meetingId={meetingId}
+          label={minutes ? "Tentar de novo" : "Gerar ata"}
+        />
+      </div>
+    );
+  }
+
+  if (minutes.status === "pending" || minutes.status === "generating") {
+    return <p className="text-text-secondary">Gerando ata...</p>;
+  }
+
+  if (!minutes.document) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-text-secondary">A ata gerada não pôde ser lida.</p>
+        <GenerateMinutesButton meetingId={meetingId} label="Tentar de novo" />
+      </div>
+    );
+  }
+
+  return <MinutesView document={minutes.document} />;
 }
 
 function TranscriptTab({ chunks }: { chunks: Chunk[] }) {
