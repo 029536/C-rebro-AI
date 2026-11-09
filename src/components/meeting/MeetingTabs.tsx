@@ -3,10 +3,15 @@
 import {
   ClipboardCheck,
   FileText,
+  HelpCircle,
   History,
   ListChecks,
+  ListOrdered,
   MessageSquare,
+  Scale,
   ScrollText,
+  Stethoscope,
+  Wrench,
 } from "lucide-react";
 import { useState } from "react";
 import { GenerateMinutesButton } from "@/components/meeting/GenerateMinutesButton";
@@ -15,11 +20,11 @@ import { formatDateTime, formatTime } from "@/lib/format";
 import type { MinutesDocument } from "@/lib/minutes/schema";
 import Link from "next/link";
 
-type TabKey = "ata" | "parecer" | "plano" | "chat" | "transcricao" | "sessoes";
+type TabKey = "parecer" | "ata" | "plano" | "chat" | "transcricao" | "sessoes";
 
 const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
-  { key: "ata", label: "Ata", icon: FileText },
-  { key: "parecer", label: "Parecer", icon: ClipboardCheck },
+  { key: "parecer", label: "Parecer da IA", icon: ClipboardCheck },
+  { key: "ata", label: "Ata completa", icon: FileText },
   { key: "plano", label: "Plano", icon: ListChecks },
   { key: "chat", label: "Chat", icon: MessageSquare },
   { key: "transcricao", label: "Transcrição", icon: ScrollText },
@@ -48,7 +53,7 @@ export function MeetingTabs({
   chunks: Chunk[];
   previousMeetings: PreviousMeeting[];
 }) {
-  const [active, setActive] = useState<TabKey>("ata");
+  const [active, setActive] = useState<TabKey>("parecer");
 
   return (
     <div className="flex flex-1 flex-col">
@@ -61,7 +66,7 @@ export function MeetingTabs({
               key={tab.key}
               type="button"
               onClick={() => setActive(tab.key)}
-              className={`flex min-h-11 shrink-0 items-center gap-1.5 border-b-2 px-3 text-sm font-medium ${
+              className={`flex min-h-11 shrink-0 items-center gap-1.5 border-b-2 px-3 text-xs font-semibold tracking-wide uppercase ${
                 isActive
                   ? "border-accent text-accent"
                   : "border-transparent text-text-secondary"
@@ -79,7 +84,7 @@ export function MeetingTabs({
           <AtaTab meetingId={meetingId} meetingStatus={meetingStatus} minutes={minutes} />
         )}
 
-        {active === "parecer" && <ComingSoon text="O parecer final chega numa próxima etapa." />}
+        {active === "parecer" && <ParecerTab />}
         {active === "plano" && (
           <ComingSoon text="O plano de execução com prompts prontos chega numa próxima etapa." />
         )}
@@ -96,6 +101,36 @@ export function MeetingTabs({
 
 function ComingSoon({ text }: { text: string }) {
   return <p className="text-text-secondary">{text}</p>;
+}
+
+const PARECER_SECTIONS = [
+  { title: "Meu diagnóstico", icon: Stethoscope },
+  { title: "Minha avaliação das ideias", icon: Scale },
+  { title: "Como eu desenvolveria", icon: Wrench },
+  { title: "Perguntas críticas", icon: HelpCircle },
+  { title: "Prioridade recomendada", icon: ListOrdered },
+] as const;
+
+function ParecerTab() {
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-text-secondary">
+        O parecer do Claude (a opinião do terceiro sócio) chega numa próxima etapa.
+      </p>
+      {PARECER_SECTIONS.map(({ title, icon: Icon }) => (
+        <div
+          key={title}
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 opacity-60"
+        >
+          <Icon size={20} className="shrink-0 text-text-secondary" />
+          <div>
+            <p className="font-semibold text-text">{title}</p>
+            <p className="text-sm text-text-secondary">Ainda não disponível</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function AtaTab({

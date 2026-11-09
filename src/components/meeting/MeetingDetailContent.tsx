@@ -3,17 +3,13 @@ import { notFound } from "next/navigation";
 import { MeetingActions } from "@/components/MeetingActions";
 import { MeetingSetupSection } from "@/components/MeetingSetupSection";
 import { MeetingTabs, type MinutesState } from "@/components/meeting/MeetingTabs";
+import { StatusBadge } from "@/components/StatusBadge";
 import { redactSecrets } from "@/lib/ai/env";
 import { formatDateTime, formatDuration } from "@/lib/format";
+import { deriveMeetingChips } from "@/lib/meetings";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
-
-const STATUS_LABEL: Record<string, string> = {
-  recording: "Gravando ou interrompida",
-  ready: "Gravada",
-  analyzed: "Com parecer",
-};
 
 /**
  * Conteúdo da ficha de uma reunião (cabeçalho + abas). Usado tanto pela rota
@@ -67,6 +63,13 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
     .limit(1)
     .maybeSingle();
 
+  const { data: analysisRow } = await supabase
+    .from("analyses")
+    .select("meeting_id")
+    .eq("meeting_id", meetingId)
+    .limit(1)
+    .maybeSingle();
+
   const minutes: MinutesState | null = minutesRow
     ? {
         status: minutesRow.status,
@@ -81,16 +84,28 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
 
   const isRecording = meeting.status === "recording";
   const participants = participantsSchema.safeParse(meeting.participants);
+  const chips = deriveMeetingChips({
+    meetingStatus: meeting.status,
+    hasReadyMinutes: minutesRow?.status === "ready",
+    hasAnalysis: Boolean(analysisRow),
+  });
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
       <div>
         <h1 className="text-xl font-semibold text-text">{meeting.title}</h1>
         <p className="text-sm text-text-secondary">
-          {formatDateTime(meeting.started_at)} · {STATUS_LABEL[meeting.status] ?? meeting.status}
+          {formatDateTime(meeting.started_at)}
           {" · "}
           {isRecording ? "Em andamento" : formatDuration(meeting.duration_seconds)}
         </p>
+        {chips.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {chips.map((chip) => (
+              <StatusBadge key={chip} status={chip} />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between">
