@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       context: parsed.data.context || null,
       project_id: projectId,
     })
-    .select("id")
+    .select("id, title")
     .single();
 
   if (error || !data) {
@@ -89,5 +89,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ id: data.id }, { status: 201 });
+  return NextResponse.json({ id: data.id, title: data.title }, { status: 201 });
 }

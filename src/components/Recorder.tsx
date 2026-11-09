@@ -1,7 +1,9 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AudioWave } from "@/components/AudioWave";
 import { MeetingRecorder, type RecorderError } from "@/lib/recorder/recorder";
 import {
   chunkKey,
@@ -21,10 +23,14 @@ const RETRY_INTERVAL_MS = 5_000;
 type TranscriptSegment = { idx: number; partNo: number; text: string; at: string };
 
 function formatElapsed(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60)
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
     .toString()
     .padStart(2, "0");
   const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  if (hours > 0) {
+    return `${hours}:${minutes}:${seconds}`;
+  }
   return `${minutes}:${seconds}`;
 }
 
@@ -45,10 +51,12 @@ function errorMessage(error: RecorderError): string {
 
 export function Recorder({
   meetingId,
+  meetingTitle,
   initialPartNo = 1,
   initialIdx = 0,
 }: {
   meetingId: string;
+  meetingTitle: string;
   initialPartNo?: number;
   initialIdx?: number;
 }) {
@@ -58,10 +66,12 @@ export function Recorder({
   );
   const [showConsent, setShowConsent] = useState(false);
   const [status, setStatus] = useState<"idle" | "recording" | "finishing">("idle");
+  const [autoOpine, setAutoOpine] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
 
   const recorderRef = useRef<MeetingRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockHandle | null>(null);
@@ -207,6 +217,7 @@ export function Recorder({
     recorderRef.current = recorder;
     setStatus("recording");
     await recorder.start();
+    setMediaStream(recorder.mediaStream);
   }
 
   async function handleFinish() {
@@ -214,6 +225,7 @@ export function Recorder({
     await wakeLockRef.current?.release();
     wakeLockRef.current = null;
     setStatus("finishing");
+    setMediaStream(null);
 
     // Dá um instante para o último trecho parcial (onstop do MediaRecorder) ser
     // enfileirado e para as tentativas pendentes mais recentes saírem.
@@ -230,8 +242,20 @@ export function Recorder({
     router.push("/");
   }
 
+  function handleBack() {
+    if (status === "recording") {
+      const confirmed = confirm(
+        "Sair agora não encerra a reunião direito — prefira \"Encerrar reunião\". Sair mesmo assim?"
+      );
+      if (!confirmed) return;
+    }
+    router.push("/");
+  }
+
+  const lastSegment = segments[segments.length - 1];
+
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4">
+    <div className="flex flex-1 flex-col">
       {showConsent && (
         <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-4">
           <div className="flex max-w-sm flex-col gap-4 rounded-2xl bg-surface p-6">
@@ -250,71 +274,137 @@ export function Recorder({
         </div>
       )}
 
-      <div className="flex flex-col items-center gap-2">
-        <span className="text-4xl font-semibold tabular-nums text-text">
-          {formatElapsed(elapsedSeconds)}
-        </span>
-        <p className="text-sm text-text-secondary">
-          Mantenha a tela ligada e o aparelho carregando.
-        </p>
-      </div>
-
-      {error && (
-        <p role="alert" className="text-sm text-record">
-          {error}
-        </p>
-      )}
-
-      {pendingCount > 0 && (
-        <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-sm">
-          <span className="text-text-secondary">{pendingCount} trecho(s) aguardando envio.</span>
+      <header className="flex h-14 items-center justify-between px-4">
+        <button type="button" onClick={handleBack} className="flex h-11 w-11 items-center justify-center text-text">
+          <ArrowLeft size={22} />
+        </button>
+        <label className="flex items-center gap-2">
+          <span className="text-sm font-medium text-text">Opinar automaticamente</span>
           <button
             type="button"
-            onClick={async () => {
-              await resetBackoff(meetingId);
-              await retryDueChunks();
-            }}
-            className="font-semibold text-accent"
+            role="switch"
+            aria-checked={autoOpine}
+            onClick={() => setAutoOpine((value) => !value)}
+            className={`flex h-7 w-12 items-center rounded-full p-1 transition-colors ${
+              autoOpine ? "bg-accent" : "bg-border"
+            }`}
           >
-            Reenviar agora
+            <span
+              className={`h-5 w-5 rounded-full bg-white transition-transform ${
+                autoOpine ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
           </button>
-        </div>
-      )}
+        </label>
+      </header>
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
-        {segments.map((segment, index) => {
-          const previous = segments[index - 1];
-          const showMarker = !previous || previous.partNo !== segment.partNo;
-          return (
-            <div key={segment.idx}>
-              {showMarker && (
-                <p className="pb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
-                  Parte {segment.partNo}, {formatClock(new Date(segment.at))}
-                </p>
-              )}
-              <p className="text-text">{segment.text}</p>
-            </div>
-          );
-        })}
-      </div>
+      <main className="flex flex-1 flex-col gap-5 px-4 pb-32">
+        {status === "recording" || status === "finishing" ? (
+          <div className="flex flex-col items-center gap-1 pt-2 text-center">
+            <span className="flex items-center gap-2 text-sm font-semibold text-record">
+              <span className="h-2.5 w-2.5 rounded-full bg-record" />
+              {status === "finishing" ? "Encerrando..." : "Gravando"}
+            </span>
+            <span className="text-4xl font-bold tabular-nums text-text">
+              {formatElapsed(elapsedSeconds)}
+            </span>
+            <span className="text-sm text-text-secondary">{meetingTitle}</span>
+          </div>
+        ) : (
+          <p className="pt-2 text-center text-sm text-text-secondary">
+            Mantenha a tela ligada e o aparelho carregando.
+          </p>
+        )}
+
+        <AudioWave stream={mediaStream} active={status === "recording"} />
+
+        {error && (
+          <p role="alert" className="text-sm text-record">
+            {error}
+          </p>
+        )}
+
+        {pendingCount > 0 && (
+          <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-sm">
+            <span className="text-text-secondary">{pendingCount} trecho(s) aguardando envio.</span>
+            <button
+              type="button"
+              onClick={async () => {
+                await resetBackoff(meetingId);
+                await retryDueChunks();
+              }}
+              className="font-semibold text-accent"
+            >
+              Reenviar agora
+            </button>
+          </div>
+        )}
+
+        {lastSegment && (
+          <p className="rounded-xl bg-surface px-4 py-3 text-sm italic text-text-secondary shadow-sm">
+            ...{lastSegment.text}...
+          </p>
+        )}
+
+        <div className="flex flex-1 flex-col gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-text">Claude opinando</h2>
+            <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+              Opiniões da IA (Claude)
+            </span>
+          </div>
+          <p className="text-sm text-text-secondary">
+            O copiloto chega numa próxima etapa — por enquanto, acompanhe a transcrição abaixo.
+          </p>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+          {segments.map((segment, index) => {
+            const previous = segments[index - 1];
+            const showMarker = !previous || previous.partNo !== segment.partNo;
+            return (
+              <div key={segment.idx}>
+                {showMarker && (
+                  <p className="pb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                    Parte {segment.partNo}, {formatClock(new Date(segment.at))}
+                  </p>
+                )}
+                <p className="text-text">{segment.text}</p>
+              </div>
+            );
+          })}
+        </div>
+      </main>
 
       {status === "idle" ? (
-        <button
-          type="button"
-          onClick={handleStart}
-          className="h-[60px] rounded-xl bg-accent text-base font-semibold text-white"
-        >
-          Começar a gravar
-        </button>
+        <div className="fixed inset-x-0 bottom-0 p-4">
+          <button
+            type="button"
+            onClick={handleStart}
+            className="h-[60px] w-full rounded-xl bg-accent text-base font-semibold text-white"
+          >
+            Começar a gravar
+          </button>
+        </div>
       ) : (
-        <button
-          type="button"
-          onClick={handleFinish}
-          disabled={status === "finishing"}
-          className="h-[60px] rounded-xl bg-record text-base font-semibold text-white disabled:opacity-60"
-        >
-          {status === "finishing" ? "Encerrando..." : "Encerrar"}
-        </button>
+        <div className="fixed inset-x-0 bottom-0 flex gap-3 border-t border-border bg-surface-bottom p-4">
+          <button
+            type="button"
+            disabled
+            title="Chega numa próxima etapa"
+            className="flex h-14 flex-1 items-center justify-center rounded-xl border border-record text-sm font-semibold text-record opacity-60"
+          >
+            Pedir opinião agora
+          </button>
+          <button
+            type="button"
+            onClick={handleFinish}
+            disabled={status === "finishing"}
+            className="flex h-14 flex-1 items-center justify-center rounded-xl bg-record text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {status === "finishing" ? "Encerrando..." : "Encerrar reunião"}
+          </button>
+        </div>
       )}
     </div>
   );

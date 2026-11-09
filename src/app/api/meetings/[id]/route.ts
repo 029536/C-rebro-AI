@@ -38,7 +38,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (parsed.data.action === "resume") {
     const { data: meeting, error: fetchError } = await supabase
       .from("meetings")
-      .select("status")
+      .select("status, title")
       .eq("id", id)
       .single();
 
@@ -60,6 +60,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Não grava nada: só informa o cliente de onde continuar. Quem abre a nova
     // parte de fato é o próximo envio de trecho, com `forcePartNo`.
     return NextResponse.json({
+      title: meeting.title,
       part_no: (latestChunk?.part_no ?? 0) + 1,
       next_idx: (latestChunk?.idx ?? -1) + 1,
     });

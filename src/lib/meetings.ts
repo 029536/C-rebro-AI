@@ -115,3 +115,24 @@ export function groupMeetingsBySession(
   }
   return [...groups.values()];
 }
+
+export type MeetingChip = "ata" | "parecer" | "andamento";
+
+/**
+ * Quais selos mostrar no cartão da reunião na lista (Tela "Reuniões").
+ * "Em andamento" é exclusivo; "Ata gerada" e "Parecer disponível" podem
+ * aparecer juntos, numa reunião já encerrada que tem os dois.
+ */
+export function deriveMeetingChips(params: {
+  meetingStatus: string;
+  hasReadyMinutes: boolean;
+  hasAnalysis: boolean;
+}): MeetingChip[] {
+  if (params.meetingStatus === "recording") {
+    return ["andamento"];
+  }
+  const chips: MeetingChip[] = [];
+  if (params.hasReadyMinutes) chips.push("ata");
+  if (params.hasAnalysis) chips.push("parecer");
+  return chips;
+}

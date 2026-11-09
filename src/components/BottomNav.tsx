@@ -13,6 +13,11 @@ const ITEMS = [
 export function BottomNav() {
   const pathname = usePathname();
 
+  // Tela de gravação: nav inferior escondida (barra própria com "Encerrar" no lugar).
+  if (pathname.startsWith("/nova")) {
+    return null;
+  }
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 flex h-16 border-t border-border bg-surface-bottom md:hidden">
       {ITEMS.map((item) => {

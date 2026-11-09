@@ -1,19 +1,10 @@
-import { Layers, Plus } from "lucide-react";
+import { ArrowLeft, Layers, Mic } from "lucide-react";
 import Link from "next/link";
 import { MeetingActions } from "@/components/MeetingActions";
+import { StatusBadge } from "@/components/StatusBadge";
 import { formatDateTime } from "@/lib/format";
-import { groupMeetingsBySession } from "@/lib/meetings";
+import { deriveMeetingChips, groupMeetingsBySession } from "@/lib/meetings";
 import { createClient } from "@/lib/supabase/server";
-
-const STATUS_BADGE: Record<string, string> = {
-  ready: "Gravada",
-  analyzed: "Com parecer",
-};
-
-function previewFromMarkdown(markdown: string): string {
-  const plain = markdown.replace(/^#+\s.*$/gm, "").replace(/\s+/g, " ").trim();
-  return plain.length > 140 ? `${plain.slice(0, 140)}…` : plain;
-}
 
 export default async function MeetingsPage({
   searchParams,
@@ -37,14 +28,17 @@ export default async function MeetingsPage({
   const recent = (meetings ?? []).filter((meeting) => meeting.status !== "recording");
 
   const recentIds = recent.map((meeting) => meeting.id);
-  const [{ data: analyses }, { data: sessionLinks }] = await Promise.all([
+  const [{ data: analyses }, { data: minutesRows }, { data: sessionLinks }] = await Promise.all([
+    recentIds.length > 0
+      ? supabase.from("analyses").select("meeting_id").in("meeting_id", recentIds)
+      : Promise.resolve({ data: [] as { meeting_id: string }[] }),
     recentIds.length > 0
       ? supabase
-          .from("analyses")
-          .select("meeting_id, content_md, created_at")
+          .from("meeting_minutes")
+          .select("meeting_id, status")
           .in("meeting_id", recentIds)
           .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [] as { meeting_id: string; content_md: string; created_at: string }[] }),
+      : Promise.resolve({ data: [] as { meeting_id: string; status: string }[] }),
     recentIds.length > 0
       ? supabase
           .from("meeting_links")
@@ -54,10 +48,11 @@ export default async function MeetingsPage({
       : Promise.resolve({ data: [] as { meeting_id: string; previous_meeting_id: string }[] }),
   ]);
 
-  const latestPreview = new Map<string, string>();
-  for (const analysis of analyses ?? []) {
-    if (!latestPreview.has(analysis.meeting_id)) {
-      latestPreview.set(analysis.meeting_id, previewFromMarkdown(analysis.content_md));
+  const hasAnalysis = new Set((analyses ?? []).map((row) => row.meeting_id));
+  const latestMinutesStatus = new Map<string, string>();
+  for (const row of minutesRows ?? []) {
+    if (!latestMinutesStatus.has(row.meeting_id)) {
+      latestMinutesStatus.set(row.meeting_id, row.status);
     }
   }
 
@@ -83,110 +78,128 @@ export default async function MeetingsPage({
     .filter((card): card is { head: MeetingRow; sessionCount: number } => card.head !== undefined)
     .sort((a, b) => b.head.started_at.localeCompare(a.head.started_at));
 
+  if (showArchived) {
+    return (
+      <div className="flex flex-1 flex-col gap-5 p-4">
+        <Link href="/" className="flex h-11 items-center gap-2 text-sm font-medium text-text-secondary">
+          <ArrowLeft size={18} />
+          Reuniões
+        </Link>
+        <h1 className="text-2xl font-bold text-text">Reuniões arquivadas</h1>
+        <MeetingList cards={cards} showArchived hasAnalysis={hasAnalysis} latestMinutesStatus={latestMinutesStatus} />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="sticky top-0 z-[5] flex flex-col gap-3 bg-background p-4 pb-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-text">Reuniões</h1>
-          <Link
-            href="/nova"
-            className="flex h-[52px] items-center gap-1.5 rounded-xl bg-accent px-5 text-sm font-semibold text-white"
-          >
-            <Plus size={18} />
-            Nova reunião
-          </Link>
-        </div>
-        <div className="flex gap-4 text-sm font-medium">
-          <Link
-            href="/"
-            className={showArchived ? "text-text-secondary" : "border-b-2 border-accent text-accent"}
-          >
-            Recentes
-          </Link>
-          <Link
-            href="/?arquivadas=1"
-            className={showArchived ? "border-b-2 border-accent text-accent" : "text-text-secondary"}
-          >
-            Arquivadas
-          </Link>
-        </div>
+    <div className="flex flex-1 flex-col gap-5 p-4">
+      <div>
+        <h1 className="text-2xl font-bold text-text">Reuniões</h1>
+        <p className="text-sm text-text-secondary">{cards.length} reuniões gravadas</p>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        {inProgress.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
-              Em andamento
-            </h2>
-            {inProgress.map((meeting) => (
-              <div
-                key={meeting.id}
-                className="flex flex-col gap-3 rounded-xl border border-record bg-surface p-4"
-              >
-                <Link href={`/reunioes/${meeting.id}`}>
-                  <p className="font-semibold text-text">{meeting.title}</p>
-                  <p className="text-sm text-text-secondary">Gravação interrompida</p>
-                </Link>
-                <div className="flex items-center justify-between">
-                  <Link
-                    href={`/nova?meetingId=${meeting.id}`}
-                    className="flex min-h-11 items-center font-semibold text-record"
-                  >
-                    Retomar
-                  </Link>
-                  <MeetingActions meetingId={meeting.id} afterDelete="/" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      <Link
+        href="/nova"
+        className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm"
+      >
+        <span className="text-base font-semibold text-text">Nova reunião</span>
+        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft">
+          <Mic size={28} className="text-accent" />
+        </span>
+        <span className="text-sm text-text-secondary">Toque para iniciar sua reunião</span>
+        <span className="flex h-14 w-full items-center justify-center rounded-xl bg-accent text-base font-semibold text-white">
+          Gravar
+        </span>
+      </Link>
 
+      {inProgress.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
-            {showArchived ? "Arquivadas" : "Recentes"}
+            Em andamento
           </h2>
-
-          {cards.length > 0 ? (
-            <ul className="flex flex-col gap-2">
-              {cards.map(({ head: meeting, sessionCount }) => (
-                <li
-                  key={meeting.id}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 shadow-sm"
+          {inProgress.map((meeting) => (
+            <div
+              key={meeting.id}
+              className="flex flex-col gap-3 rounded-2xl border border-record bg-surface p-4 shadow-sm"
+            >
+              <Link href={`/reunioes/${meeting.id}`}>
+                <p className="font-semibold text-text">{meeting.title}</p>
+                <p className="text-sm text-text-secondary">Gravação interrompida</p>
+              </Link>
+              <div className="flex items-center justify-between">
+                <Link
+                  href={`/nova?meetingId=${meeting.id}`}
+                  className="flex min-h-11 items-center font-semibold text-record"
                 >
-                  <Link href={`/reunioes/${meeting.id}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold text-text">{meeting.title}</p>
-                      <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
-                        {STATUS_BADGE[meeting.status] ?? meeting.status}
-                      </span>
-                    </div>
-                    <p className="text-sm text-text-secondary">{formatDateTime(meeting.started_at)}</p>
-                    {latestPreview.has(meeting.id) && (
-                      <p className="mt-1 text-sm text-text-secondary">{latestPreview.get(meeting.id)}</p>
-                    )}
-                    {sessionCount > 1 && (
-                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-accent">
-                        <Layers size={14} />
-                        {sessionCount} sessões
-                      </p>
-                    )}
-                  </Link>
-                  <MeetingActions
-                    meetingId={meeting.id}
-                    showArchiveToggle
-                    isArchived={showArchived}
-                    afterDelete="/"
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-text-secondary">
-              {showArchived ? "Nenhuma reunião arquivada." : "Nenhuma reunião ainda."}
-            </p>
-          )}
+                  Retomar
+                </Link>
+                <MeetingActions meetingId={meeting.id} afterDelete="/" />
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
+
+      <MeetingList cards={cards} showArchived={false} hasAnalysis={hasAnalysis} latestMinutesStatus={latestMinutesStatus} />
     </div>
+  );
+}
+
+function MeetingList({
+  cards,
+  showArchived,
+  hasAnalysis,
+  latestMinutesStatus,
+}: {
+  cards: { head: { id: string; title: string; started_at: string; status: string }; sessionCount: number }[];
+  showArchived: boolean;
+  hasAnalysis: Set<string>;
+  latestMinutesStatus: Map<string, string>;
+}) {
+  if (cards.length === 0) {
+    return (
+      <p className="text-text-secondary">
+        {showArchived ? "Nenhuma reunião arquivada." : "Nenhuma reunião ainda."}
+      </p>
+    );
+  }
+
+  return (
+    <ul className="flex flex-col gap-3">
+      {cards.map(({ head: meeting, sessionCount }) => {
+        const chips = deriveMeetingChips({
+          meetingStatus: meeting.status,
+          hasReadyMinutes: latestMinutesStatus.get(meeting.id) === "ready",
+          hasAnalysis: hasAnalysis.has(meeting.id),
+        });
+        return (
+          <li key={meeting.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <Link href={`/reunioes/${meeting.id}`}>
+              <p className="font-semibold text-text">{meeting.title}</p>
+              <p className="text-sm text-text-secondary">{formatDateTime(meeting.started_at)}</p>
+              {chips.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {chips.map((chip) => (
+                    <StatusBadge key={chip} status={chip} />
+                  ))}
+                </div>
+              )}
+              {sessionCount > 1 && (
+                <p className="mt-2 flex items-center gap-1 text-xs font-medium text-accent">
+                  <Layers size={14} />
+                  {sessionCount} sessões
+                </p>
+              )}
+            </Link>
+            <MeetingActions
+              meetingId={meeting.id}
+              showArchiveToggle
+              isArchived={showArchived}
+              afterDelete="/"
+            />
+          </li>
+        );
+      })}
+    </ul>
   );
 }

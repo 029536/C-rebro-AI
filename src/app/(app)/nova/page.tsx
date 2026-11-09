@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { Recorder } from "@/components/Recorder";
 import { MeetingSetupForm, type MeetingSetupValue } from "@/components/MeetingSetupForm";
 
-type Session = { meetingId: string; initialPartNo: number; initialIdx: number };
+type Session = { meetingId: string; meetingTitle: string; initialPartNo: number; initialIdx: number };
 
 export default function NovaReuniaoPage() {
   return (
@@ -34,11 +34,16 @@ function NovaReuniaoContent() {
     })
       .then((response) => {
         if (!response.ok) throw new Error("falha ao retomar reunião");
-        return response.json() as Promise<{ part_no: number; next_idx: number }>;
+        return response.json() as Promise<{ title: string; part_no: number; next_idx: number }>;
       })
       .then((data) => {
         if (!cancelled) {
-          setSession({ meetingId: resumeMeetingId, initialPartNo: data.part_no, initialIdx: data.next_idx });
+          setSession({
+            meetingId: resumeMeetingId,
+            meetingTitle: data.title,
+            initialPartNo: data.part_no,
+            initialIdx: data.next_idx,
+          });
         }
       })
       .catch(() => {
@@ -69,8 +74,8 @@ function NovaReuniaoContent() {
         }),
       });
       if (!response.ok) throw new Error("falha ao criar reunião");
-      const data: { id: string } = await response.json();
-      setSession({ meetingId: data.id, initialPartNo: 1, initialIdx: 0 });
+      const data: { id: string; title: string } = await response.json();
+      setSession({ meetingId: data.id, meetingTitle: data.title, initialPartNo: 1, initialIdx: 0 });
     } catch {
       setError(true);
     }
@@ -102,6 +107,7 @@ function NovaReuniaoContent() {
   return (
     <Recorder
       meetingId={session.meetingId}
+      meetingTitle={session.meetingTitle}
       initialPartNo={session.initialPartNo}
       initialIdx={session.initialIdx}
     />
