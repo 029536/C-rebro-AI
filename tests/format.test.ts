@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateTime, formatDuration, formatTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatDuration, formatOffset, formatTime } from "@/lib/format";
 
 describe("formatTime", () => {
   it("converte de UTC para America/Sao_Paulo (UTC-3), não mostra o horário cru do servidor", () => {
@@ -35,5 +35,19 @@ describe("formatDuration", () => {
 
   it("devolve um traço quando não há duração", () => {
     expect(formatDuration(null)).toBe("—");
+  });
+});
+
+describe("formatOffset", () => {
+  it("mostra mm:ss abaixo de uma hora", () => {
+    expect(formatOffset(125)).toBe("02:05");
+  });
+
+  it("mostra h:mm:ss a partir de uma hora", () => {
+    expect(formatOffset(3_725)).toBe("1:02:05");
+  });
+
+  it("mostra 00:00 para zero", () => {
+    expect(formatOffset(0)).toBe("00:00");
   });
 });

@@ -2,13 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MeetingActions } from "@/components/MeetingActions";
 import { MeetingSetupSection } from "@/components/MeetingSetupSection";
-import { MeetingTabs, type MinutesState } from "@/components/meeting/MeetingTabs";
+import { MeetingTabs, type MinutesState, type ReviewState } from "@/components/meeting/MeetingTabs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { redactSecrets } from "@/lib/ai/env";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { deriveMeetingChips } from "@/lib/meetings";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
+import { reviewContentSchema } from "@/lib/reviews/schema";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -63,12 +64,19 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
     .limit(1)
     .maybeSingle();
 
-  const { data: analysisRow } = await supabase
-    .from("analyses")
-    .select("meeting_id")
+  const { data: reviewRow } = await supabase
+    .from("meeting_reviews")
+    .select("status, error, error_detail, content")
     .eq("meeting_id", meetingId)
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const { data: opinionRows } = await supabase
+    .from("meeting_opinions")
+    .select("id, offset_seconds, text")
+    .eq("meeting_id", meetingId)
+    .order("created_at", { ascending: true });
 
   const minutes: MinutesState | null = minutesRow
     ? {
@@ -82,12 +90,21 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
       }
     : null;
 
+  const review: ReviewState | null = reviewRow
+    ? {
+        status: reviewRow.status,
+        error: reviewRow.error ? redactSecrets(reviewRow.error) : null,
+        errorDetail: reviewRow.error_detail ? redactSecrets(reviewRow.error_detail) : null,
+        content: reviewRow.status === "ready" ? parseReviewContent(reviewRow.content) : null,
+      }
+    : null;
+
   const isRecording = meeting.status === "recording";
   const participants = participantsSchema.safeParse(meeting.participants);
   const chips = deriveMeetingChips({
     meetingStatus: meeting.status,
     hasReadyMinutes: minutesRow?.status === "ready",
-    hasAnalysis: Boolean(analysisRow),
+    hasReadyReview: reviewRow?.status === "ready",
   });
 
   return (
@@ -152,6 +169,8 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
         meetingId={meetingId}
         meetingStatus={meeting.status}
         minutes={minutes}
+        review={review}
+        opinions={opinionRows ?? []}
         chunks={chunks ?? []}
         previousMeetings={previousMeetings ?? []}
       />
@@ -161,5 +180,10 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
 
 function parseMinutesDocument(content: unknown) {
   const parsed = minutesDocumentSchema.safeParse(content);
+  return parsed.success ? parsed.data : null;
+}
+
+function parseReviewContent(content: unknown) {
+  const parsed = reviewContentSchema.safeParse(content);
   return parsed.success ? parsed.data : null;
 }

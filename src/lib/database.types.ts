@@ -1,6 +1,6 @@
-// Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009 e 0010 (sem
-// acesso a Docker/Supabase CLI local neste ambiente). Depois que o projeto Supabase existir
-// e as migrações forem aplicadas, regenere com:
+// Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009, 0010 e 0011
+// (sem acesso a Docker/Supabase CLI local neste ambiente). Depois que o projeto Supabase
+// existir e as migrações forem aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -229,6 +229,64 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "meeting_minutes_meeting_id_fkey";
+            columns: ["meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meeting_opinions: {
+        Row: {
+          id: string;
+          meeting_id: string;
+          created_at: string;
+          offset_seconds: number;
+          text: string;
+        };
+        Insert: {
+          id?: string;
+          meeting_id: string;
+          created_at?: string;
+          offset_seconds?: number;
+          text: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meeting_opinions"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meeting_opinions_meeting_id_fkey";
+            columns: ["meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meeting_reviews: {
+        Row: {
+          id: string;
+          meeting_id: string;
+          content: Json | null;
+          status: "pending" | "generating" | "ready" | "error";
+          error: string | null;
+          error_detail: string | null;
+          model: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          meeting_id: string;
+          content?: Json | null;
+          status?: "pending" | "generating" | "ready" | "error";
+          error?: string | null;
+          error_detail?: string | null;
+          model?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meeting_reviews"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meeting_reviews_meeting_id_fkey";
             columns: ["meeting_id"];
             isOneToOne: false;
             referencedRelation: "meetings";

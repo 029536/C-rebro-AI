@@ -1,4 +1,4 @@
-import { PART_MINUTES } from "@/lib/config";
+import { AUTO_OPINION_MIN_NEW_CHARS, PART_MINUTES } from "@/lib/config";
 import { formatDateTime } from "@/lib/format";
 
 /** Título padrão quando a reunião é criada sem título (fluxo normal do botão "Nova reunião"). */
@@ -126,13 +126,30 @@ export type MeetingChip = "ata" | "parecer" | "andamento";
 export function deriveMeetingChips(params: {
   meetingStatus: string;
   hasReadyMinutes: boolean;
-  hasAnalysis: boolean;
+  hasReadyReview: boolean;
 }): MeetingChip[] {
   if (params.meetingStatus === "recording") {
     return ["andamento"];
   }
   const chips: MeetingChip[] = [];
   if (params.hasReadyMinutes) chips.push("ata");
-  if (params.hasAnalysis) chips.push("parecer");
+  if (params.hasReadyReview) chips.push("parecer");
   return chips;
+}
+
+/**
+ * Decide se o interruptor "Opinar automaticamente" deve pedir uma opinião
+ * nova agora: só quando ligado, sem uma chamada já em andamento, e com fala
+ * nova suficiente desde a última opinião (~2 minutos, ver
+ * AUTO_OPINION_MIN_NEW_CHARS) — nunca chamadas repetidas à toa nem duas ao
+ * mesmo tempo.
+ */
+export function shouldAutoGenerateOpinion(params: {
+  autoOpineEnabled: boolean;
+  isGenerating: boolean;
+  newTranscriptChars: number;
+  minNewChars?: number;
+}): boolean {
+  if (!params.autoOpineEnabled || params.isGenerating) return false;
+  return params.newTranscriptChars >= (params.minNewChars ?? AUTO_OPINION_MIN_NEW_CHARS);
 }

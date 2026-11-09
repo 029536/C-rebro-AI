@@ -4,6 +4,9 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AudioWave } from "@/components/AudioWave";
+import { OpinionCard } from "@/components/OpinionCard";
+import { formatOffset } from "@/lib/format";
+import { shouldAutoGenerateOpinion } from "@/lib/meetings";
 import { MeetingRecorder, type RecorderError } from "@/lib/recorder/recorder";
 import {
   chunkKey,
@@ -21,18 +24,7 @@ const CONSENT_KEY = "cerebro-ia:consentimento-gravacao";
 const RETRY_INTERVAL_MS = 5_000;
 
 type TranscriptSegment = { idx: number; partNo: number; text: string; at: string };
-
-function formatElapsed(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-  if (hours > 0) {
-    return `${hours}:${minutes}:${seconds}`;
-  }
-  return `${minutes}:${seconds}`;
-}
+type Opinion = { id: string; offsetSeconds: number; text: string };
 
 function formatClock(date: Date): string {
   return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -72,11 +64,23 @@ export function Recorder({
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+  const [opinions, setOpinions] = useState<Opinion[]>([]);
+  const [isGeneratingOpinion, setIsGeneratingOpinion] = useState(false);
+  const [opinionError, setOpinionError] = useState<string | null>(null);
 
   const recorderRef = useRef<MeetingRecorder | null>(null);
   const wakeLockRef = useRef<WakeLockHandle | null>(null);
   const nextIdxRef = useRef(initialIdx);
   const pendingCheckpointsRef = useRef<Set<number>>(new Set());
+  const isGeneratingOpinionRef = useRef(false);
+  const lastOpinionCharsRef = useRef(0);
+  const segmentsCharsRef = useRef(0);
+  const elapsedSecondsRef = useRef(0);
+  const autoOpineRef = useRef(autoOpine);
+
+  useEffect(() => {
+    autoOpineRef.current = autoOpine;
+  }, [autoOpine]);
 
   async function requestCheckpoint(partNo: number) {
     try {
@@ -99,6 +103,37 @@ export function Recorder({
     }
   }
 
+  async function requestOpinion(offsetSeconds: number) {
+    if (isGeneratingOpinionRef.current) return;
+    isGeneratingOpinionRef.current = true;
+    setIsGeneratingOpinion(true);
+    setOpinionError(null);
+
+    try {
+      const response = await fetch(`/api/meetings/${meetingId}/copilot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offset_seconds: offsetSeconds }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setOpinionError(data?.error ?? "Não foi possível pedir uma opinião agora.");
+        return;
+      }
+      if (data && !data.skipped) {
+        setOpinions((prev) => [
+          ...prev,
+          { id: data.id as string, offsetSeconds: data.offset_seconds as number, text: data.text as string },
+        ]);
+      }
+      // Conta a partir de agora, gerada ou não (SEM_CONTRIBUICAO também não deve repetir à toa).
+      lastOpinionCharsRef.current = segmentsCharsRef.current;
+    } finally {
+      isGeneratingOpinionRef.current = false;
+      setIsGeneratingOpinion(false);
+    }
+  }
+
   async function uploadChunk(chunk: QueuedChunk) {
     const formData = new FormData();
     formData.append("audio", chunk.blob, `chunk-${chunk.idx}.${chunk.extension}`);
@@ -118,16 +153,27 @@ export function Recorder({
       const data: { transcript: string; part_no: number; closed_part_no: number | null } =
         await response.json();
       await markChunkSent(chunk.key);
-      setSegments((prev) =>
-        prev.some((segment) => segment.idx === chunk.idx)
-          ? prev
-          : [
-              ...prev,
-              { idx: chunk.idx, partNo: data.part_no, text: data.transcript, at: new Date().toISOString() },
-            ].sort((a, b) => a.idx - b.idx)
-      );
+      setSegments((prev) => {
+        if (prev.some((segment) => segment.idx === chunk.idx)) return prev;
+        segmentsCharsRef.current += data.transcript.length;
+        return [
+          ...prev,
+          { idx: chunk.idx, partNo: data.part_no, text: data.transcript, at: new Date().toISOString() },
+        ].sort((a, b) => a.idx - b.idx);
+      });
       if (data.closed_part_no !== null) {
         await requestCheckpoint(data.closed_part_no);
+      }
+
+      const newChars = segmentsCharsRef.current - lastOpinionCharsRef.current;
+      if (
+        shouldAutoGenerateOpinion({
+          autoOpineEnabled: autoOpineRef.current,
+          isGenerating: isGeneratingOpinionRef.current,
+          newTranscriptChars: newChars,
+        })
+      ) {
+        requestOpinion(elapsedSecondsRef.current);
       }
     } catch {
       await markChunkFailed(chunk.key);
@@ -190,7 +236,10 @@ export function Recorder({
     wakeLockRef.current = await requestWakeLock();
 
     const recorder = new MeetingRecorder({
-      onTick: setElapsedSeconds,
+      onTick: (seconds) => {
+        elapsedSecondsRef.current = seconds;
+        setElapsedSeconds(seconds);
+      },
       onError: (recorderError) => setError(errorMessage(recorderError)),
       onChunk: async (chunk) => {
         const idx = nextIdxRef.current;
@@ -306,7 +355,7 @@ export function Recorder({
               {status === "finishing" ? "Encerrando..." : "Gravando"}
             </span>
             <span className="text-4xl font-bold tabular-nums text-text">
-              {formatElapsed(elapsedSeconds)}
+              {formatOffset(elapsedSeconds)}
             </span>
             <span className="text-sm text-text-secondary">{meetingTitle}</span>
           </div>
@@ -353,9 +402,27 @@ export function Recorder({
               Opiniões da IA (Claude)
             </span>
           </div>
-          <p className="text-sm text-text-secondary">
-            O copiloto chega numa próxima etapa — por enquanto, acompanhe a transcrição abaixo.
-          </p>
+          {opinionError && (
+            <p role="alert" className="text-sm text-record">
+              {opinionError}
+            </p>
+          )}
+          {opinions.length === 0 ? (
+            <p className="text-sm text-text-secondary">
+              {isGeneratingOpinion ? "Pedindo a primeira opinião..." : "Nenhuma opinião ainda."}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {[...opinions].reverse().map((opinion, index) => (
+                <OpinionCard
+                  key={opinion.id}
+                  text={opinion.text}
+                  timeLabel={formatOffset(opinion.offsetSeconds)}
+                  highlighted={index === 0}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
@@ -390,11 +457,11 @@ export function Recorder({
         <div className="fixed inset-x-0 bottom-0 flex gap-3 border-t border-border bg-surface-bottom p-4">
           <button
             type="button"
-            disabled
-            title="Chega numa próxima etapa"
-            className="flex h-14 flex-1 items-center justify-center rounded-xl border border-record text-sm font-semibold text-record opacity-60"
+            onClick={() => requestOpinion(elapsedSecondsRef.current)}
+            disabled={isGeneratingOpinion || status === "finishing"}
+            className="flex h-14 flex-1 items-center justify-center rounded-xl border border-record text-sm font-semibold text-record disabled:opacity-60"
           >
-            Pedir opinião agora
+            {isGeneratingOpinion ? "Pedindo..." : "Pedir opinião agora"}
           </button>
           <button
             type="button"

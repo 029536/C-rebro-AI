@@ -28,10 +28,14 @@ export default async function MeetingsPage({
   const recent = (meetings ?? []).filter((meeting) => meeting.status !== "recording");
 
   const recentIds = recent.map((meeting) => meeting.id);
-  const [{ data: analyses }, { data: minutesRows }, { data: sessionLinks }] = await Promise.all([
+  const [{ data: reviewRows }, { data: minutesRows }, { data: sessionLinks }] = await Promise.all([
     recentIds.length > 0
-      ? supabase.from("analyses").select("meeting_id").in("meeting_id", recentIds)
-      : Promise.resolve({ data: [] as { meeting_id: string }[] }),
+      ? supabase
+          .from("meeting_reviews")
+          .select("meeting_id, status")
+          .in("meeting_id", recentIds)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as { meeting_id: string; status: string }[] }),
     recentIds.length > 0
       ? supabase
           .from("meeting_minutes")
@@ -48,7 +52,12 @@ export default async function MeetingsPage({
       : Promise.resolve({ data: [] as { meeting_id: string; previous_meeting_id: string }[] }),
   ]);
 
-  const hasAnalysis = new Set((analyses ?? []).map((row) => row.meeting_id));
+  const latestReviewStatus = new Map<string, string>();
+  for (const row of reviewRows ?? []) {
+    if (!latestReviewStatus.has(row.meeting_id)) {
+      latestReviewStatus.set(row.meeting_id, row.status);
+    }
+  }
   const latestMinutesStatus = new Map<string, string>();
   for (const row of minutesRows ?? []) {
     if (!latestMinutesStatus.has(row.meeting_id)) {
@@ -86,7 +95,12 @@ export default async function MeetingsPage({
           Reuniões
         </Link>
         <h1 className="text-2xl font-bold text-text">Reuniões arquivadas</h1>
-        <MeetingList cards={cards} showArchived hasAnalysis={hasAnalysis} latestMinutesStatus={latestMinutesStatus} />
+        <MeetingList
+          cards={cards}
+          showArchived
+          latestReviewStatus={latestReviewStatus}
+          latestMinutesStatus={latestMinutesStatus}
+        />
       </div>
     );
   }
@@ -140,7 +154,12 @@ export default async function MeetingsPage({
         </div>
       )}
 
-      <MeetingList cards={cards} showArchived={false} hasAnalysis={hasAnalysis} latestMinutesStatus={latestMinutesStatus} />
+      <MeetingList
+        cards={cards}
+        showArchived={false}
+        latestReviewStatus={latestReviewStatus}
+        latestMinutesStatus={latestMinutesStatus}
+      />
     </div>
   );
 }
@@ -148,12 +167,12 @@ export default async function MeetingsPage({
 function MeetingList({
   cards,
   showArchived,
-  hasAnalysis,
+  latestReviewStatus,
   latestMinutesStatus,
 }: {
   cards: { head: { id: string; title: string; started_at: string; status: string }; sessionCount: number }[];
   showArchived: boolean;
-  hasAnalysis: Set<string>;
+  latestReviewStatus: Map<string, string>;
   latestMinutesStatus: Map<string, string>;
 }) {
   if (cards.length === 0) {
@@ -170,7 +189,7 @@ function MeetingList({
         const chips = deriveMeetingChips({
           meetingStatus: meeting.status,
           hasReadyMinutes: latestMinutesStatus.get(meeting.id) === "ready",
-          hasAnalysis: hasAnalysis.has(meeting.id),
+          hasReadyReview: latestReviewStatus.get(meeting.id) === "ready",
         });
         return (
           <li key={meeting.id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">

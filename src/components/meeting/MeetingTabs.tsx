@@ -6,19 +6,21 @@ import {
   HelpCircle,
   History,
   ListChecks,
-  ListOrdered,
   MessageSquare,
   Scale,
   ScrollText,
   Stethoscope,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { GenerateMinutesButton } from "@/components/meeting/GenerateMinutesButton";
+import { GenerateReviewButton } from "@/components/meeting/GenerateReviewButton";
 import { MinutesView } from "@/components/meeting/MinutesView";
-import { formatDateTime, formatTime } from "@/lib/format";
+import { OpinionCard } from "@/components/OpinionCard";
+import { formatDateTime, formatOffset, formatTime } from "@/lib/format";
 import type { MinutesDocument } from "@/lib/minutes/schema";
-import Link from "next/link";
+import type { ReviewContent } from "@/lib/reviews/schema";
 
 type TabKey = "parecer" | "ata" | "plano" | "chat" | "transcricao" | "sessoes";
 
@@ -33,6 +35,8 @@ const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
 
 type Chunk = { idx: number; part_no: number; transcript: string; created_at: string };
 type PreviousMeeting = { id: string; title: string; started_at: string };
+type OpinionRow = { id: string; offset_seconds: number; text: string };
+
 export type MinutesState = {
   status: "pending" | "generating" | "ready" | "error";
   error: string | null;
@@ -40,16 +44,27 @@ export type MinutesState = {
   document: MinutesDocument | null;
 };
 
+export type ReviewState = {
+  status: "pending" | "generating" | "ready" | "error";
+  error: string | null;
+  errorDetail: string | null;
+  content: ReviewContent | null;
+};
+
 export function MeetingTabs({
   meetingId,
   meetingStatus,
   minutes,
+  review,
+  opinions,
   chunks,
   previousMeetings,
 }: {
   meetingId: string;
   meetingStatus: string;
   minutes: MinutesState | null;
+  review: ReviewState | null;
+  opinions: OpinionRow[];
   chunks: Chunk[];
   previousMeetings: PreviousMeeting[];
 }) {
@@ -84,7 +99,9 @@ export function MeetingTabs({
           <AtaTab meetingId={meetingId} meetingStatus={meetingStatus} minutes={minutes} />
         )}
 
-        {active === "parecer" && <ParecerTab />}
+        {active === "parecer" && (
+          <ParecerTab meetingId={meetingId} meetingStatus={meetingStatus} review={review} />
+        )}
         {active === "plano" && (
           <ComingSoon text="O plano de execução com prompts prontos chega numa próxima etapa." />
         )}
@@ -92,7 +109,7 @@ export function MeetingTabs({
           <ComingSoon text="A conversa sobre a reunião chega numa próxima etapa." />
         )}
 
-        {active === "transcricao" && <TranscriptTab chunks={chunks} />}
+        {active === "transcricao" && <TranscriptTab chunks={chunks} opinions={opinions} />}
         {active === "sessoes" && <SessionsTab previousMeetings={previousMeetings} />}
       </div>
     </div>
@@ -103,33 +120,104 @@ function ComingSoon({ text }: { text: string }) {
   return <p className="text-text-secondary">{text}</p>;
 }
 
-const PARECER_SECTIONS = [
-  { title: "Meu diagnóstico", icon: Stethoscope },
-  { title: "Minha avaliação das ideias", icon: Scale },
-  { title: "Como eu desenvolveria", icon: Wrench },
-  { title: "Perguntas críticas", icon: HelpCircle },
-  { title: "Prioridade recomendada", icon: ListOrdered },
-] as const;
+function ParecerTab({
+  meetingId,
+  meetingStatus,
+  review,
+}: {
+  meetingId: string;
+  meetingStatus: string;
+  review: ReviewState | null;
+}) {
+  if (meetingStatus === "recording") {
+    return (
+      <p className="text-text-secondary">
+        O parecer fica disponível depois que a gravação for encerrada.
+      </p>
+    );
+  }
 
-function ParecerTab() {
+  if (!review || review.status === "error") {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-text-secondary">{review?.error ?? "Esta reunião ainda não tem parecer."}</p>
+        {review?.errorDetail && <p className="text-xs text-text-secondary">{review.errorDetail}</p>}
+        <GenerateReviewButton
+          meetingId={meetingId}
+          label={review ? "Gerar de novo" : "Gerar parecer"}
+        />
+      </div>
+    );
+  }
+
+  if (review.status === "pending" || review.status === "generating") {
+    return <p className="text-text-secondary">Gerando parecer...</p>;
+  }
+
+  if (!review.content) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-text-secondary">O parecer gerado não pôde ser lido.</p>
+        <GenerateReviewButton meetingId={meetingId} label="Gerar de novo" />
+      </div>
+    );
+  }
+
+  const content = review.content;
+
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-text-secondary">
-        O parecer do Claude (a opinião do terceiro sócio) chega numa próxima etapa.
-      </p>
-      {PARECER_SECTIONS.map(({ title, icon: Icon }) => (
-        <div
-          key={title}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 opacity-60"
-        >
-          <Icon size={20} className="shrink-0 text-text-secondary" />
-          <div>
-            <p className="font-semibold text-text">{title}</p>
-            <p className="text-sm text-text-secondary">Ainda não disponível</p>
-          </div>
-        </div>
-      ))}
+      <div className="flex justify-end">
+        <GenerateReviewButton meetingId={meetingId} label="Gerar de novo" />
+      </div>
+      <ReviewSectionCard title="Meu diagnóstico" icon={Stethoscope} body={content.diagnostico} />
+      <ReviewSectionCard title="Minha avaliação das ideias" icon={Scale} body={content.avaliacao} />
+      <ReviewSectionCard title="Como eu desenvolveria" icon={Wrench} list={content.como_desenvolveria} />
+      <ReviewSectionCard title="Perguntas críticas" icon={HelpCircle} list={content.perguntas_criticas} />
     </div>
+  );
+}
+
+function ReviewSectionCard({
+  title,
+  icon: Icon,
+  body,
+  list,
+}: {
+  title: string;
+  icon: typeof Stethoscope;
+  body?: string;
+  list?: string[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = body
+    ? body.length > 90
+      ? `${body.slice(0, 90)}…`
+      : body
+    : `${list?.length ?? 0} item(ns)`;
+
+  return (
+    <button
+      type="button"
+      onClick={() => setExpanded((value) => !value)}
+      className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-left shadow-sm"
+    >
+      <div className="flex items-start gap-3">
+        <Icon size={20} className="mt-0.5 shrink-0 text-accent" />
+        <div className="flex-1">
+          <p className="font-semibold text-text">{title}</p>
+          {!expanded && <p className="text-sm text-text-secondary">{summary}</p>}
+        </div>
+      </div>
+      {expanded &&
+        (body ? (
+          <p className="whitespace-pre-wrap text-sm text-text">{body}</p>
+        ) : (
+          <ul className="list-disc space-y-1 pl-9 text-sm text-text">
+            {list?.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        ))}
+    </button>
   );
 }
 
@@ -183,29 +271,47 @@ function AtaTab({
   return <MinutesView document={minutes.document} />;
 }
 
-function TranscriptTab({ chunks }: { chunks: Chunk[] }) {
-  if (chunks.length === 0) {
-    return <p className="text-text-secondary">Ainda não há transcrição.</p>;
-  }
-
-  const hasMultipleParts = chunks[chunks.length - 1].part_no > 1;
+function TranscriptTab({ chunks, opinions }: { chunks: Chunk[]; opinions: OpinionRow[] }) {
+  const hasMultipleParts = chunks.length > 0 && chunks[chunks.length - 1].part_no > 1;
 
   return (
-    <div className="flex flex-col gap-2">
-      {chunks.map((chunk, index) => {
-        const previous = chunks[index - 1];
-        const showMarker = hasMultipleParts && (!previous || previous.part_no !== chunk.part_no);
-        return (
-          <div key={chunk.idx}>
-            {showMarker && (
-              <p className="pb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
-                Parte {chunk.part_no}, {formatTime(chunk.created_at)}
-              </p>
-            )}
-            <p className="text-text">{chunk.transcript}</p>
-          </div>
-        );
-      })}
+    <div className="flex flex-col gap-4">
+      {opinions.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+            Claude opinando
+          </h3>
+          {[...opinions].reverse().map((opinion, index) => (
+            <OpinionCard
+              key={opinion.id}
+              text={opinion.text}
+              timeLabel={formatOffset(opinion.offset_seconds)}
+              highlighted={index === 0}
+            />
+          ))}
+        </div>
+      )}
+
+      {chunks.length === 0 ? (
+        <p className="text-text-secondary">Ainda não há transcrição.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {chunks.map((chunk, index) => {
+            const previous = chunks[index - 1];
+            const showMarker = hasMultipleParts && (!previous || previous.part_no !== chunk.part_no);
+            return (
+              <div key={chunk.idx}>
+                {showMarker && (
+                  <p className="pb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                    Parte {chunk.part_no}, {formatTime(chunk.created_at)}
+                  </p>
+                )}
+                <p className="text-text">{chunk.transcript}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

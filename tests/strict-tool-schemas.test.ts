@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { MINUTES_INPUT_SCHEMA, PREPARE_MEETING_INPUT_SCHEMA } from "@/lib/ai/prompts";
+import {
+  MINUTES_INPUT_SCHEMA,
+  PREPARE_MEETING_INPUT_SCHEMA,
+  REVIEW_INPUT_SCHEMA,
+} from "@/lib/ai/prompts";
 import { toStrictInputSchema } from "@/lib/ai/strictSchema";
 
 /**
  * Esquemas de toda ferramenta "strict: true" do projeto. Ao adicionar uma
- * nova (parecer, plano etc.), inclua aqui — é o que garante que nenhuma
- * fique sem additionalProperties: false, do jeito que causou um 400 em
- * produção.
+ * nova (plano, copiloto estruturado etc.), inclua aqui — é o que garante
+ * que nenhuma fique sem additionalProperties: false, do jeito que causou um
+ * 400 em produção.
  */
 const TOOL_SCHEMAS: { name: string; schema: Record<string, unknown> }[] = [
   { name: "salvar_ata", schema: MINUTES_INPUT_SCHEMA },
   { name: "preencher_formulario", schema: PREPARE_MEETING_INPUT_SCHEMA },
+  { name: "salvar_parecer", schema: REVIEW_INPUT_SCHEMA },
 ];
 
 /** Caminhos de todo nó `{ type: "object", properties: {...} }` sem `additionalProperties: false`. */

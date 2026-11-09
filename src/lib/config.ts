@@ -35,3 +35,11 @@ export const PROJECT_REPO_MAP_MAX_CHARS = 12_000;
 
 /** Quantos arquivos/documentos resumir por chamada do `CLAUDE_FAST_MODEL` (lotes retomáveis). */
 export const PROJECT_SUMMARIZE_BATCH_SIZE = 10;
+
+/**
+ * Caracteres novos de transcrição (desde a última opinião) antes de disparar
+ * uma opinião automática do copiloto — aproxima "~2 minutos de fala nova"
+ * (fala em português, ritmo de conversa, gira em torno de 700-900
+ * caracteres por minuto). Ajustável sem mexer na lógica.
+ */
+export const AUTO_OPINION_MIN_NEW_CHARS = 1600;
