@@ -63,6 +63,7 @@ export function Recorder({
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [chunkUploadError, setChunkUploadError] = useState<string | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [opinions, setOpinions] = useState<Opinion[]>([]);
   const [isGeneratingOpinion, setIsGeneratingOpinion] = useState(false);
@@ -137,7 +138,7 @@ export function Recorder({
   async function uploadChunk(chunk: QueuedChunk) {
     const formData = new FormData();
     formData.append("audio", chunk.blob, `chunk-${chunk.idx}.${chunk.extension}`);
-    formData.append("idx", String(chunk.idx));
+    formData.append("clientChunkId", String(chunk.idx));
     formData.append("audioSeconds", String(chunk.audioSeconds));
     if (chunk.forcePartNo !== undefined) {
       formData.append("forcePartNo", String(chunk.forcePartNo));
@@ -148,10 +149,14 @@ export function Recorder({
         method: "POST",
         body: formData,
       });
-      if (!response.ok) throw new Error("upload falhou");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? "Falha ao enviar o trecho. Tente de novo.");
+      }
 
       const data: { transcript: string; part_no: number; closed_part_no: number | null } =
         await response.json();
+      setChunkUploadError(null);
       await markChunkSent(chunk.key);
       setSegments((prev) => {
         if (prev.some((segment) => segment.idx === chunk.idx)) return prev;
@@ -175,7 +180,11 @@ export function Recorder({
       ) {
         requestOpinion(elapsedSecondsRef.current);
       }
-    } catch {
+    } catch (error) {
+      // Nunca engole em silêncio: o áudio já está salvo no IndexedDB (ver
+      // enqueueChunk) e tenta de novo sozinho, com espera crescente
+      // (computeBackoffMs) — só avisa na tela o motivo da última falha.
+      setChunkUploadError(error instanceof Error ? error.message : "Falha ao enviar o trecho.");
       await markChunkFailed(chunk.key);
     } finally {
       const pending = await listPendingChunks(meetingId);
@@ -374,18 +383,26 @@ export function Recorder({
         )}
 
         {pendingCount > 0 && (
-          <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-sm">
-            <span className="text-text-secondary">{pendingCount} trecho(s) aguardando envio.</span>
-            <button
-              type="button"
-              onClick={async () => {
-                await resetBackoff(meetingId);
-                await retryDueChunks();
-              }}
-              className="font-semibold text-accent"
-            >
-              Reenviar agora
-            </button>
+          <div className="flex flex-col gap-1 rounded-xl border border-border bg-surface p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-text-secondary">{pendingCount} trecho(s) aguardando envio.</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await resetBackoff(meetingId);
+                  await retryDueChunks();
+                }}
+                className="font-semibold text-accent"
+              >
+                Reenviar agora
+              </button>
+            </div>
+            {chunkUploadError && (
+              <p className="text-xs text-record">
+                Última tentativa: {chunkUploadError} O áudio está salvo no aparelho e a gente
+                tenta de novo sozinho.
+              </p>
+            )}
           </div>
         )}
 

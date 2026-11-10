@@ -193,7 +193,7 @@ Todas as tabelas com Row Level Security. Cada linha pertence a um usuário; filh
 | Tabela | Para que serve |
 | --- | --- |
 | `meetings` | Reunião: título, status (`recording`, `ready`, `analyzed`), tipo (`client`/`internal`), cliente, participantes (jsonb), contexto, início, fim, duração, foco, arquivamento, `project_id` opcional |
-| `meeting_chunks` | Texto de cada trecho, com `idx` único por reunião e `part_no` |
+| `meeting_chunks` | Texto de cada trecho; `idx` é atribuído pelo servidor (nunca confia no cliente), único por reunião junto com `part_no`; `client_chunk_id` é a chave de idempotência do reenvio |
 | `meeting_checkpoints` | Resumo imutável de cada parte de uma reunião longa |
 | `meeting_minutes` | Ata estruturada (jsonb) + ajuste manual opcional; várias versões, vale a mais recente |
 | `meeting_links` | Ligação `meeting_id → previous_meeting_id`, com `link_type` (`context`: memória geral; `session`: mesma conversa, outra sessão) |
