@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildContext } from "@/lib/ai/context";
+import { buildContext, selectRecentTranscript } from "@/lib/ai/context";
 
 describe("buildContext", () => {
   it("usa a transcrição inteira quando ela cabe no orçamento de caracteres", () => {
@@ -42,5 +42,38 @@ describe("buildContext", () => {
     const result = buildContext({ checkpoints: [], chunks: [], currentPartNo: 1, fullTranscriptMaxChars: 10 });
     expect(result.usedFullTranscript).toBe(true);
     expect(result.transcriptBlock).toBe("");
+  });
+});
+
+describe("selectRecentTranscript", () => {
+  it("devolve tudo quando a reunião inteira já cabe na janela", () => {
+    const chunks = [
+      { transcript: "um", audioSeconds: 30 },
+      { transcript: "dois", audioSeconds: 30 },
+    ];
+    expect(selectRecentTranscript(chunks, 300)).toBe("um dois");
+  });
+
+  it("pega só os últimos N segundos, de trás para a frente, não a reunião inteira", () => {
+    const chunks = [
+      { transcript: "muito antigo, fica de fora", audioSeconds: 200 },
+      { transcript: "recente um", audioSeconds: 100 },
+      { transcript: "recente dois", audioSeconds: 100 },
+    ];
+    // Janela de 150s: pega de trás pra frente até estourar — "recente dois" (100s)
+    // não basta sozinho, então inclui também "recente um" (soma 200s >= 150).
+    expect(selectRecentTranscript(chunks, 150)).toBe("recente um recente dois");
+  });
+
+  it("devolve string vazia sem trechos", () => {
+    expect(selectRecentTranscript([], 300)).toBe("");
+  });
+
+  it("ignora trechos com transcrição vazia dentro da janela", () => {
+    const chunks = [
+      { transcript: "  ", audioSeconds: 10 },
+      { transcript: "texto de verdade", audioSeconds: 10 },
+    ];
+    expect(selectRecentTranscript(chunks, 60)).toBe("texto de verdade");
   });
 });

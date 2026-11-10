@@ -74,7 +74,7 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
 
   const { data: opinionRows } = await supabase
     .from("meeting_opinions")
-    .select("id, offset_seconds, text")
+    .select("id, offset_seconds, text, kind, prompt")
     .eq("meeting_id", meetingId)
     .order("created_at", { ascending: true });
 

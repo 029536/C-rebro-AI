@@ -1,4 +1,4 @@
-import { FULL_TRANSCRIPT_MAX_CHARS } from "@/lib/config";
+import { COPILOT_RECENT_WINDOW_SECONDS, FULL_TRANSCRIPT_MAX_CHARS } from "@/lib/config";
 
 export type ContextCheckpoint = { partNo: number; summary: string };
 export type ContextChunk = { idx: number; partNo: number; transcript: string };
@@ -50,4 +50,31 @@ export function buildContext(params: {
   );
 
   return { checkpointsBlock, transcriptBlock: currentPartTranscript, usedFullTranscript: false };
+}
+
+export type RecentChunk = { transcript: string; audioSeconds: number };
+
+/**
+ * Pega os últimos `windowSeconds` de fala (somando `audioSeconds` de trás
+ * para a frente), não a reunião inteira — é o que o copiloto manda junto
+ * com o resumo acumulado (lib/opinions/service.ts), para controlar custo
+ * numa reunião longa sem perder o que acabou de ser dito.
+ */
+export function selectRecentTranscript(
+  chunks: RecentChunk[],
+  windowSeconds: number = COPILOT_RECENT_WINDOW_SECONDS
+): string {
+  const selected: RecentChunk[] = [];
+  let secondsSoFar = 0;
+
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    if (secondsSoFar >= windowSeconds) break;
+    selected.unshift(chunks[i]);
+    secondsSoFar += chunks[i].audioSeconds;
+  }
+
+  return selected
+    .map((chunk) => chunk.transcript.trim())
+    .filter(Boolean)
+    .join(" ");
 }

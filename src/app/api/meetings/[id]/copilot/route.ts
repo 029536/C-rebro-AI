@@ -5,9 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
 
-const bodySchema = z.object({ offset_seconds: z.coerce.number().int().min(0) });
+const bodySchema = z.object({
+  offset_seconds: z.coerce.number().int().min(0),
+  kind: z.enum(["opiniao", "pergunta", "resposta"]).default("opiniao"),
+  question: z.string().trim().max(500).optional(),
+});
 
-/** "Pedir opinião agora" e o disparo automático do interruptor "Opinar automaticamente". */
+/** "Pedir opinião agora" (opinar/perguntas/responder) e o disparo automático do interruptor. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: meetingId } = await params;
   const body = await request.json().catch(() => null);
@@ -17,7 +21,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const supabase = await createClient();
-  const result = await generateMeetingOpinion(supabase, meetingId, parsed.data.offset_seconds);
+  const result = await generateMeetingOpinion(supabase, meetingId, {
+    offsetSeconds: parsed.data.offset_seconds,
+    kind: parsed.data.kind,
+    question: parsed.data.question,
+  });
 
   if (!result.ok) {
     return NextResponse.json(

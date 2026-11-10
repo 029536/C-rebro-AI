@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AskCopilotSheet, type AskCopilotChoice } from "@/components/AskCopilotSheet";
 import { AudioWave } from "@/components/AudioWave";
-import { OpinionCard } from "@/components/OpinionCard";
+import { OpinionCard, type OpinionKind } from "@/components/OpinionCard";
 import { formatOffset } from "@/lib/format";
 import { shouldAutoGenerateOpinion } from "@/lib/meetings";
 import { MeetingRecorder, type RecorderError } from "@/lib/recorder/recorder";
@@ -21,10 +22,18 @@ import {
 import { requestWakeLock, type WakeLockHandle } from "@/lib/recorder/wakeLock";
 
 const CONSENT_KEY = "cerebro-ia:consentimento-gravacao";
+const AUTO_OPINE_KEY = "cerebro-ia:opinar-automaticamente";
 const RETRY_INTERVAL_MS = 5_000;
+const DRAIN_MAX_WAIT_MS = 30_000;
 
 type TranscriptSegment = { idx: number; partNo: number; text: string; at: string };
-type Opinion = { id: string; offsetSeconds: number; text: string };
+type Opinion = {
+  id: string;
+  offsetSeconds: number;
+  text: string;
+  kind: OpinionKind;
+  prompt: string | null;
+};
 
 function formatClock(date: Date): string {
   return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -58,14 +67,20 @@ export function Recorder({
   );
   const [showConsent, setShowConsent] = useState(false);
   const [status, setStatus] = useState<"idle" | "recording" | "finishing">("idle");
-  const [autoOpine, setAutoOpine] = useState(true);
+  // O copiloto é manual por padrão — o interruptor lembra a última escolha.
+  const [autoOpine, setAutoOpine] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(AUTO_OPINE_KEY) === "1"
+  );
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const [isUploadingChunk, setIsUploadingChunk] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [chunkUploadError, setChunkUploadError] = useState<string | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [opinions, setOpinions] = useState<Opinion[]>([]);
+  const [showAskSheet, setShowAskSheet] = useState(false);
   const [isGeneratingOpinion, setIsGeneratingOpinion] = useState(false);
   const [opinionError, setOpinionError] = useState<string | null>(null);
 
@@ -81,6 +96,7 @@ export function Recorder({
 
   useEffect(() => {
     autoOpineRef.current = autoOpine;
+    localStorage.setItem(AUTO_OPINE_KEY, autoOpine ? "1" : "0");
   }, [autoOpine]);
 
   async function requestCheckpoint(partNo: number) {
@@ -104,7 +120,7 @@ export function Recorder({
     }
   }
 
-  async function requestOpinion(offsetSeconds: number) {
+  async function requestOpinion(offsetSeconds: number, choice: AskCopilotChoice = { kind: "opiniao" }) {
     if (isGeneratingOpinionRef.current) return;
     isGeneratingOpinionRef.current = true;
     setIsGeneratingOpinion(true);
@@ -114,7 +130,11 @@ export function Recorder({
       const response = await fetch(`/api/meetings/${meetingId}/copilot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offset_seconds: offsetSeconds }),
+        body: JSON.stringify({
+          offset_seconds: offsetSeconds,
+          kind: choice.kind,
+          question: choice.kind === "resposta" ? choice.question : undefined,
+        }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
@@ -124,8 +144,17 @@ export function Recorder({
       if (data && !data.skipped) {
         setOpinions((prev) => [
           ...prev,
-          { id: data.id as string, offsetSeconds: data.offset_seconds as number, text: data.text as string },
+          {
+            id: data.id as string,
+            offsetSeconds: data.offset_seconds as number,
+            text: data.text as string,
+            kind: data.kind as OpinionKind,
+            prompt: (data.prompt as string | null) ?? null,
+          },
         ]);
+        setShowAskSheet(false);
+      } else {
+        setShowAskSheet(false);
       }
       // Conta a partir de agora, gerada ou não (SEM_CONTRIBUICAO também não deve repetir à toa).
       lastOpinionCharsRef.current = segmentsCharsRef.current;
@@ -136,6 +165,7 @@ export function Recorder({
   }
 
   async function uploadChunk(chunk: QueuedChunk) {
+    setIsUploadingChunk(true);
     const formData = new FormData();
     formData.append("audio", chunk.blob, `chunk-${chunk.idx}.${chunk.extension}`);
     formData.append("clientChunkId", String(chunk.idx));
@@ -178,15 +208,17 @@ export function Recorder({
           newTranscriptChars: newChars,
         })
       ) {
-        requestOpinion(elapsedSecondsRef.current);
+        requestOpinion(elapsedSecondsRef.current, { kind: "opiniao" });
       }
     } catch (error) {
       // Nunca engole em silêncio: o áudio já está salvo no IndexedDB (ver
-      // enqueueChunk) e tenta de novo sozinho, com espera crescente
-      // (computeBackoffMs) — só avisa na tela o motivo da última falha.
+      // enqueueChunk) e tenta de novo sozinho, com espera crescente, até 3
+      // vezes (CHUNK_MAX_AUTO_RETRIES) — só avisa na tela o motivo da última
+      // falha, sem perder o trecho.
       setChunkUploadError(error instanceof Error ? error.message : "Falha ao enviar o trecho.");
       await markChunkFailed(chunk.key);
     } finally {
+      setIsUploadingChunk(false);
       const pending = await listPendingChunks(meetingId);
       setPendingCount(pending.length);
     }
@@ -197,6 +229,19 @@ export function Recorder({
     for (const chunk of due) {
       await uploadChunk(chunk);
     }
+  }
+
+  /** Tenta esvaziar a fila de trechos antes de encerrar, sem travar para sempre numa rede ruim. */
+  async function drainUploadQueue(maxWaitMs: number): Promise<boolean> {
+    await resetBackoff(meetingId); // também dá mais uma chance a trechos que já tinham esgotado.
+    const deadline = Date.now() + maxWaitMs;
+    while (Date.now() < deadline) {
+      const pending = await listPendingChunks(meetingId);
+      if (pending.length === 0) return true;
+      await retryDueChunks();
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    return (await listPendingChunks(meetingId)).length === 0;
   }
 
   useEffect(() => {
@@ -285,11 +330,20 @@ export function Recorder({
     setStatus("finishing");
     setMediaStream(null);
 
-    // Dá um instante para o último trecho parcial (onstop do MediaRecorder) ser
-    // enfileirado e para as tentativas pendentes mais recentes saírem.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    await retryDueChunks();
+    // Dá um instante para o último trecho parcial (onstop do MediaRecorder) ser enfileirado.
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    const drained = await drainUploadQueue(DRAIN_MAX_WAIT_MS);
     await retryPendingCheckpoints();
+
+    if (!drained) {
+      const proceed = confirm(
+        "Alguns trechos ainda não foram enviados (a conexão pode estar instável). A ata pode sair incompleta. Encerrar mesmo assim? O áudio continua salvo e \"Continuar gravação\" tenta de novo depois."
+      );
+      if (!proceed) {
+        setStatus("recording");
+        return;
+      }
+    }
 
     await fetch(`/api/meetings/${meetingId}`, {
       method: "PATCH",
@@ -311,6 +365,13 @@ export function Recorder({
   }
 
   const lastSegment = segments[segments.length - 1];
+  const transcriptStatusLabel = isUploadingChunk
+    ? "Transcrevendo..."
+    : lastSegment
+      ? `Último trecho às ${formatClock(new Date(lastSegment.at))}`
+      : chunkUploadError
+        ? null
+        : "Aguardando o primeiro trecho...";
 
   return (
     <div className="flex flex-1 flex-col">
@@ -330,6 +391,14 @@ export function Recorder({
             </button>
           </div>
         </div>
+      )}
+
+      {showAskSheet && (
+        <AskCopilotSheet
+          busy={isGeneratingOpinion}
+          onClose={() => setShowAskSheet(false)}
+          onSubmit={(choice) => requestOpinion(elapsedSecondsRef.current, choice)}
+        />
       )}
 
       <header className="flex h-14 items-center justify-between px-4">
@@ -399,18 +468,52 @@ export function Recorder({
             </div>
             {chunkUploadError && (
               <p className="text-xs text-record">
-                Última tentativa: {chunkUploadError} O áudio está salvo no aparelho e a gente
-                tenta de novo sozinho.
+                Última tentativa: {chunkUploadError} O áudio está salvo no aparelho.
               </p>
             )}
           </div>
         )}
 
-        {lastSegment && (
-          <p className="rounded-xl bg-surface px-4 py-3 text-sm italic text-text-secondary shadow-sm">
-            ...{lastSegment.text}...
-          </p>
-        )}
+        <div className="flex flex-col gap-2">
+          {transcriptStatusLabel && (
+            <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+              {transcriptStatusLabel}
+            </span>
+          )}
+          {lastSegment && (
+            <p className="rounded-xl bg-surface px-4 py-3 text-sm italic text-text-secondary shadow-sm">
+              ...{lastSegment.text}...
+            </p>
+          )}
+          {segments.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTranscriptExpanded((value) => !value)}
+              className="flex min-h-11 items-center gap-1 text-sm font-semibold text-accent"
+            >
+              {transcriptExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {transcriptExpanded ? "Ocultar transcrição" : "Ver transcrição completa"}
+            </button>
+          )}
+          {transcriptExpanded && (
+            <div className="flex flex-col gap-2">
+              {segments.map((segment, index) => {
+                const previous = segments[index - 1];
+                const showMarker = !previous || previous.partNo !== segment.partNo;
+                return (
+                  <div key={segment.idx}>
+                    {showMarker && (
+                      <p className="pb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                        Parte {segment.partNo}, {formatClock(new Date(segment.at))}
+                      </p>
+                    )}
+                    <p className="text-text">{segment.text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-1 flex-col gap-2">
           <div>
@@ -426,7 +529,7 @@ export function Recorder({
           )}
           {opinions.length === 0 ? (
             <p className="text-sm text-text-secondary">
-              {isGeneratingOpinion ? "Pedindo a primeira opinião..." : "Nenhuma opinião ainda."}
+              {isGeneratingOpinion ? "Claude pensando..." : "Nenhuma opinião ainda."}
             </p>
           ) : (
             <div className="flex flex-col gap-2">
@@ -435,28 +538,13 @@ export function Recorder({
                   key={opinion.id}
                   text={opinion.text}
                   timeLabel={formatOffset(opinion.offsetSeconds)}
+                  kind={opinion.kind}
+                  prompt={opinion.prompt}
                   highlighted={index === 0}
                 />
               ))}
             </div>
           )}
-        </div>
-
-        <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
-          {segments.map((segment, index) => {
-            const previous = segments[index - 1];
-            const showMarker = !previous || previous.partNo !== segment.partNo;
-            return (
-              <div key={segment.idx}>
-                {showMarker && (
-                  <p className="pb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
-                    Parte {segment.partNo}, {formatClock(new Date(segment.at))}
-                  </p>
-                )}
-                <p className="text-text">{segment.text}</p>
-              </div>
-            );
-          })}
         </div>
       </main>
 
@@ -474,11 +562,11 @@ export function Recorder({
         <div className="fixed inset-x-0 bottom-0 flex gap-3 border-t border-border bg-surface-bottom p-4">
           <button
             type="button"
-            onClick={() => requestOpinion(elapsedSecondsRef.current)}
+            onClick={() => setShowAskSheet(true)}
             disabled={isGeneratingOpinion || status === "finishing"}
             className="flex h-14 flex-1 items-center justify-center rounded-xl border border-record text-sm font-semibold text-record disabled:opacity-60"
           >
-            {isGeneratingOpinion ? "Pedindo..." : "Pedir opinião agora"}
+            {isGeneratingOpinion ? "Claude pensando..." : "Pedir opinião agora"}
           </button>
           <button
             type="button"

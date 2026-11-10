@@ -17,7 +17,7 @@ import { useState } from "react";
 import { GenerateMinutesButton } from "@/components/meeting/GenerateMinutesButton";
 import { GenerateReviewButton } from "@/components/meeting/GenerateReviewButton";
 import { MinutesView } from "@/components/meeting/MinutesView";
-import { OpinionCard } from "@/components/OpinionCard";
+import { OpinionCard, type OpinionKind } from "@/components/OpinionCard";
 import { formatDateTime, formatOffset, formatTime } from "@/lib/format";
 import type { MinutesDocument } from "@/lib/minutes/schema";
 import type { ReviewContent } from "@/lib/reviews/schema";
@@ -35,7 +35,7 @@ const TABS: { key: TabKey; label: string; icon: typeof FileText }[] = [
 
 type Chunk = { idx: number; part_no: number; transcript: string; created_at: string };
 type PreviousMeeting = { id: string; title: string; started_at: string };
-type OpinionRow = { id: string; offset_seconds: number; text: string };
+type OpinionRow = { id: string; offset_seconds: number; text: string; kind: OpinionKind; prompt: string | null };
 
 export type MinutesState = {
   status: "pending" | "generating" | "ready" | "error";
@@ -286,6 +286,8 @@ function TranscriptTab({ chunks, opinions }: { chunks: Chunk[]; opinions: Opinio
               key={opinion.id}
               text={opinion.text}
               timeLabel={formatOffset(opinion.offset_seconds)}
+              kind={opinion.kind}
+              prompt={opinion.prompt}
               highlighted={index === 0}
             />
           ))}

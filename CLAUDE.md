@@ -48,12 +48,12 @@ Uso principal: **celular e tablet**, em reuniões presenciais (aparelho na mesa)
 ## Fluxo de dados
 
 1. Usuário faz login (Supabase Auth) e toca em "Nova reunião": preenche tipo, título, cliente, participantes e contexto; opcionalmente escolhe um **projeto** (código e material de apoio importados) e uma ou mais **reuniões anteriores** para dar memória ao Claude. Cria um registro em `meetings` (e em `meeting_links`, se houver reuniões escolhidas).
-2. O navegador grava o microfone em trechos de 3 minutos (`MediaRecorder` parado e reiniciado a cada trecho).
-3. Cada trecho vai para `POST /api/meetings/[id]/chunks`: o servidor transcreve com Whisper (passando vocabulário da empresa e o final do trecho anterior como `prompt`), salva o texto em `meeting_chunks` (com `idx` e `part_no`) e devolve o texto e o `part_no` atual. **O áudio não é armazenado.**
+2. O navegador grava o microfone em trechos curtos (25-30s, `CHUNK_SECONDS`) — `MediaRecorder` parado e reiniciado a cada trecho (nunca timeslice, que gera pedaços sem cabeçalho válido), para a transcrição aparecer ao vivo.
+3. Cada trecho vai para `POST /api/meetings/[id]/chunks`: o servidor transcreve com Whisper (passando vocabulário da empresa e o final do trecho anterior como `prompt`), salva o texto em `meeting_chunks` e devolve o texto e o `part_no` atual. O `idx` de armazenamento é sempre decidido pelo servidor (nunca pelo cliente); o número local que o navegador já gerava vira só `client_chunk_id`, a chave de idempotência — reenviar o mesmo trecho devolve o que já existe, nunca duplica. **O áudio não é armazenado.**
 4. Quando uma parte passa de 45 minutos (soma de `audio_seconds`, configurável em `PART_MINUTES`), o servidor passa a gravar os próximos trechos na parte seguinte e o cliente chama `POST /api/meetings/[id]/checkpoint` para resumir a parte que fechou. A gravação **não** é interrompida.
-5. Se "Claude opina sozinho" estiver ligado, após cada trecho o cliente chama `POST /api/meetings/[id]/copilot`. O servidor monta o contexto (ver abaixo), anexa as notas anteriores do Claude (para ele não se repetir) e chama o Claude. Resposta `SEM_CONTRIBUICAO` não é exibida nem salva. Há também "Pedir opinião agora" (`kind = manual`, nunca vazio).
-6. Ao encerrar (`action: "finish"`), o servidor dispara sozinho `POST /api/meetings/[id]/minutes`, que gera a **ata** estruturada (ver "Ata da reunião") e grava em `meeting_minutes`. O cartão da reunião mostra "Gerando ata..." até terminar.
-7. `POST /api/meetings/[id]/analyze` gera o **parecer** final em streaming (a opinião do Claude, separada da ata). O resultado vai para `analyses`.
+5. O copiloto é **manual por padrão** (interruptor "Opinar automaticamente" começa desligado, lembra a última escolha). "Pedir opinião agora" abre uma folha com três tipos — Opinar, Fazer perguntas, Responder (pergunta digitada) — e chama `POST /api/meetings/[id]/copilot` com `kind` e, no caso de "resposta", a pergunta. Com o interruptor ligado, o mesmo pedido (`kind: "opiniao"`) dispara sozinho a cada ~2 minutos de fala nova. O servidor manda ao Claude o resumo da parte mais recente fechada (se houver) + só os últimos ~5 minutos de transcrição (não a reunião inteira, por custo — `COPILOT_RECENT_WINDOW_SECONDS`) e a última opinião (para não repetir); o prompt de sistema é estável entre pedidos da mesma reunião e usa `cache_control: ephemeral`. Resposta `SEM_CONTRIBUICAO` (só no tipo "opiniao") não é exibida nem salva. Grava em `meeting_opinions`.
+6. Ao encerrar (`action: "finish"`), o cliente espera a fila de trechos esvaziar (até 30s, reenviando) antes de confirmar, e o servidor dispara sozinho `POST /api/meetings/[id]/minutes`, que gera a **ata** estruturada (ver "Ata da reunião") e grava em `meeting_minutes`. O cartão da reunião mostra "Gerando ata..." até terminar.
+7. `POST /api/meetings/[id]/reviews` gera o **parecer** final em saída estruturada (a opinião do Claude sobre a reunião inteira, separada da ata e das opiniões do copiloto). O resultado vai para `meeting_reviews`.
 8. `POST /api/meetings/[id]/plan` gera o **plano de execução**: lista de tarefas ordenadas, cada uma com um prompt para o Claude Code, salvas em `dev_plans` e `dev_tasks`. Durante a reunião, "Preparar prompt deste assunto" cria uma tarefa rascunho a partir dos últimos minutos.
 9. `POST /api/meetings/[id]/chat` conversa sobre a conversa inteira (todas as sessões ligadas, não só esta reunião — ver "Sessões"), com transcrição, ata e parecer como contexto, em streaming.
 
@@ -165,7 +165,7 @@ cerebro-ia/
 │   │       ├── meetings/[id]/checkpoint/route.ts      # POST resumo de parte
 │   │       ├── meetings/[id]/minutes/route.ts         # POST gerar/regenerar, PATCH editar a ata
 │   │       ├── meetings/[id]/copilot/route.ts         # POST opinião
-│   │       ├── meetings/[id]/analyze/route.ts         # POST parecer (stream)
+│   │       ├── meetings/[id]/reviews/route.ts         # POST parecer (saída estruturada)
 │   │       ├── meetings/[id]/plan/route.ts            # POST plano de execução
 │   │       ├── meetings/[id]/tasks/draft/route.ts     # POST prompt do assunto atual
 │   │       ├── meetings/[id]/chat/route.ts            # POST chat (stream, contínuo entre sessões)
@@ -197,8 +197,9 @@ Todas as tabelas com Row Level Security. Cada linha pertence a um usuário; filh
 | `meeting_checkpoints` | Resumo imutável de cada parte de uma reunião longa |
 | `meeting_minutes` | Ata estruturada (jsonb) + ajuste manual opcional; várias versões, vale a mais recente |
 | `meeting_links` | Ligação `meeting_id → previous_meeting_id`, com `link_type` (`context`: memória geral; `session`: mesma conversa, outra sessão) |
-| `copilot_notes` | Comentários do Claude durante a reunião (`auto` ou `manual`) |
-| `analyses` | Parecer final em Markdown; várias versões, vale a mais recente |
+| `meeting_opinions` | Comentários do copiloto durante a reunião (`kind`: `opiniao`/`pergunta`/`resposta`; `prompt` guarda a pergunta do usuário quando `resposta`) |
+| `meeting_reviews` | Parecer estruturado (jsonb: diagnóstico, avaliação, como desenvolveria, perguntas críticas); mesmo padrão status/erro da ata |
+| `copilot_notes`, `analyses` | Tabelas do desenho original (Flask), nunca escritas pelo app atual — substituídas por `meeting_opinions`/`meeting_reviews`; ficam no banco sem uso |
 | `chat_messages` | Conversa com o Claude; contínua entre sessões (resolvida em tempo de consulta pela corrente `link_type = 'session'`) |
 | `projects` | Projeto com código e documentos importados: nome, mapa do repositório, contagens |
 | `project_files` | Arquivos de código do projeto, com hash e resumo |

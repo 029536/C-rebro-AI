@@ -2,6 +2,8 @@
 // da fila quando o servidor confirmar (markChunkSent); até lá, sobrevive a
 // recarregar a página ou perder a rede.
 
+import { CHUNK_MAX_AUTO_RETRIES } from "@/lib/config";
+
 const DB_NAME = "cerebro-ia-uploads";
 const DB_VERSION = 1;
 const STORE = "chunks";
@@ -82,10 +84,28 @@ async function listAllForMeeting(meetingId: string): Promise<QueuedChunk[]> {
 /** Trechos pendentes de uma reunião, para mostrar "N por enviar" na tela. */
 export const listPendingChunks = listAllForMeeting;
 
-/** Trechos pendentes cujo prazo de nova tentativa já chegou. */
-export async function listDueChunks(meetingId: string, now = Date.now()): Promise<QueuedChunk[]> {
+/**
+ * Trechos pendentes cujo prazo de nova tentativa já chegou — exclui os que já
+ * esgotaram as tentativas automáticas (`maxAttempts`, padrão
+ * CHUNK_MAX_AUTO_RETRIES): esses ficam parados, sem perder o áudio, até o
+ * toque manual em "Reenviar agora" (resetBackoff zera as tentativas).
+ */
+export async function listDueChunks(
+  meetingId: string,
+  now = Date.now(),
+  maxAttempts = CHUNK_MAX_AUTO_RETRIES
+): Promise<QueuedChunk[]> {
   const all = await listAllForMeeting(meetingId);
-  return all.filter((chunk) => chunk.nextAttemptAt <= now);
+  return all.filter((chunk) => chunk.nextAttemptAt <= now && chunk.attempts < maxAttempts);
+}
+
+/** Trechos que já esgotaram as tentativas automáticas — para avisar na tela. */
+export async function listExhaustedChunks(
+  meetingId: string,
+  maxAttempts = CHUNK_MAX_AUTO_RETRIES
+): Promise<QueuedChunk[]> {
+  const all = await listAllForMeeting(meetingId);
+  return all.filter((chunk) => chunk.attempts >= maxAttempts);
 }
 
 export async function markChunkSent(key: string): Promise<void> {
@@ -110,11 +130,17 @@ export async function markChunkFailed(key: string): Promise<void> {
   await withStore("readwrite", (store) => store.put(updated));
 }
 
-/** Zera o prazo de espera de todos os trechos pendentes (botão "Reenviar"). */
+/**
+ * Zera o prazo de espera e as tentativas de todos os trechos pendentes
+ * (botão "Reenviar agora") — inclusive os que já tinham esgotado as
+ * tentativas automáticas.
+ */
 export async function resetBackoff(meetingId: string): Promise<void> {
   const all = await listAllForMeeting(meetingId);
   const now = Date.now();
   await Promise.all(
-    all.map((chunk) => withStore("readwrite", (store) => store.put({ ...chunk, nextAttemptAt: now })))
+    all.map((chunk) =>
+      withStore("readwrite", (store) => store.put({ ...chunk, attempts: 0, nextAttemptAt: now }))
+    )
   );
 }

@@ -5,6 +5,7 @@ import {
   computeBackoffMs,
   enqueueChunk,
   listDueChunks,
+  listExhaustedChunks,
   listPendingChunks,
   markChunkFailed,
   markChunkSent,
@@ -78,5 +79,37 @@ describe("fila de upload (IndexedDB)", () => {
 
     const due = await listDueChunks(meetingId, Date.now());
     expect(due).toHaveLength(1);
+  });
+
+  it("para de tentar sozinho depois de esgotar as tentativas automáticas, sem perder o trecho", async () => {
+    const key = chunkKey(meetingId, 1);
+    await enqueueChunk(makeChunk(1));
+    await markChunkFailed(key); // 1
+    await markChunkFailed(key); // 2
+    await markChunkFailed(key); // 3 — esgotou (CHUNK_MAX_AUTO_RETRIES = 3)
+
+    const farFuture = Date.now() + 10 * 60_000;
+    expect(await listDueChunks(meetingId, farFuture)).toHaveLength(0);
+
+    const exhausted = await listExhaustedChunks(meetingId);
+    expect(exhausted).toHaveLength(1);
+    expect(exhausted[0].attempts).toBe(3);
+
+    // O áudio continua na fila — "Reenviar agora" (resetBackoff) dá outra chance.
+    expect(await listPendingChunks(meetingId)).toHaveLength(1);
+  });
+
+  it("'Reenviar agora' zera as tentativas, não só o prazo — resgata um trecho esgotado", async () => {
+    const key = chunkKey(meetingId, 1);
+    await enqueueChunk(makeChunk(1));
+    await markChunkFailed(key);
+    await markChunkFailed(key);
+    await markChunkFailed(key);
+
+    await resetBackoff(meetingId);
+
+    const due = await listDueChunks(meetingId, Date.now());
+    expect(due).toHaveLength(1);
+    expect(due[0].attempts).toBe(0);
   });
 });

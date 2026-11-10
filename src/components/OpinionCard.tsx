@@ -4,14 +4,27 @@ import { useState } from "react";
 
 const COLLAPSE_THRESHOLD = 220;
 
+export type OpinionKind = "opiniao" | "pergunta" | "resposta";
+
+const KIND_LABEL: Record<OpinionKind, string> = {
+  opiniao: "Opinião",
+  pergunta: "Pergunta",
+  resposta: "Resposta",
+};
+
 /** Cartão de opinião do copiloto ("Claude opinando"): expansível, sem corte permanente. */
 export function OpinionCard({
   text,
   timeLabel,
+  kind = "opiniao",
+  prompt,
   highlighted,
 }: {
   text: string;
   timeLabel: string;
+  kind?: OpinionKind;
+  /** A pergunta digitada pelo usuário, quando kind === "resposta". */
+  prompt?: string | null;
   highlighted: boolean;
 }) {
   const [expanded, setExpanded] = useState(highlighted);
@@ -26,7 +39,13 @@ export function OpinionCard({
           : "rounded-2xl border border-border bg-surface p-4 shadow-sm"
       }
     >
-      <span className="text-xs font-semibold text-text-secondary">{timeLabel}</span>
+      <div className="flex items-center gap-2">
+        <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent">
+          {KIND_LABEL[kind]}
+        </span>
+        <span className="text-xs font-semibold text-text-secondary">{timeLabel}</span>
+      </div>
+      {prompt && <p className="mt-1.5 text-sm italic text-text-secondary">Você perguntou: {prompt}</p>}
       <p className="mt-1 whitespace-pre-wrap text-sm text-text">{shown}</p>
       {isLong && (
         <button

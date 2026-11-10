@@ -7,7 +7,8 @@ import {
 
 describe("config", () => {
   it("define os limites básicos de gravação", () => {
-    expect(CHUNK_SECONDS).toBe(180);
+    // Curto de propósito, para a transcrição aparecer ao vivo (25-30s).
+    expect(CHUNK_SECONDS).toBe(27);
     // PART_MINUTES está temporariamente em 1 para o teste acelerado da Fase 3.
     expect(PART_MINUTES).toBe(1);
     expect(FULL_TRANSCRIPT_MAX_CHARS).toBe(80_000);

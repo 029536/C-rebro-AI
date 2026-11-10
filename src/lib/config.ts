@@ -1,7 +1,11 @@
 // Constantes ajustáveis do produto. Ver CLAUDE.md para o porquê de cada limite.
 
-/** Duração de cada trecho de áudio gravado no navegador, em segundos. */
-export const CHUNK_SECONDS = 180;
+/**
+ * Duração de cada trecho de áudio gravado no navegador, em segundos — curto
+ * de propósito, para a transcrição aparecer ao vivo (o gravador reinicia o
+ * MediaRecorder a cada ciclo, nunca usa timeslice: ver lib/recorder/recorder.ts).
+ */
+export const CHUNK_SECONDS = 27;
 
 /**
  * Duração de uma "parte" de reunião longa, em minutos, antes de gerar um checkpoint.
@@ -43,3 +47,13 @@ export const PROJECT_SUMMARIZE_BATCH_SIZE = 10;
  * caracteres por minuto). Ajustável sem mexer na lógica.
  */
 export const AUTO_OPINION_MIN_NEW_CHARS = 1600;
+
+/**
+ * Quanto da transcrição recente (em segundos de áudio) entra no pedido do
+ * copiloto, além do resumo acumulado — controla custo numa reunião longa,
+ * sem perder o que acabou de ser dito.
+ */
+export const COPILOT_RECENT_WINDOW_SECONDS = 300;
+
+/** Quantas vezes tentar reenviar um trecho sozinho antes de esperar o toque em "Reenviar agora". */
+export const CHUNK_MAX_AUTO_RETRIES = 3;
