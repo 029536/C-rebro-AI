@@ -3,6 +3,7 @@
 import { Brain, Calendar, FileText, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import type { MemoryItemRow } from "@/components/MemoryItemCard";
 import { ProjectManager } from "@/components/ProjectManager";
 import { ProjectMemoryPanel } from "@/components/ProjectMemoryPanel";
 import { ProjectTaskCard, type ProjectTaskRow } from "@/components/ProjectTaskCard";
@@ -25,18 +26,18 @@ export function ProjectTabs({
   projectId,
   files,
   documents,
-  memorySummary,
-  memoryLockedNote,
+  memoryItems,
   memoryUpdatedAt,
+  memoryLegacySummary,
   tasks,
   meetings,
 }: {
   projectId: string;
   files: ProjectFileRow[];
   documents: ProjectDocumentRow[];
-  memorySummary: string | null;
-  memoryLockedNote: string;
+  memoryItems: MemoryItemRow[];
   memoryUpdatedAt: string | null;
+  memoryLegacySummary: string | null;
   tasks: ProjectTaskRow[];
   meetings: ProjectMeetingRow[];
 }) {
@@ -72,9 +73,9 @@ export function ProjectTabs({
         {active === "memoria" && (
           <ProjectMemoryPanel
             projectId={projectId}
-            initialSummary={memorySummary ?? ""}
-            initialLockedNote={memoryLockedNote}
+            initialItems={memoryItems}
             initialUpdatedAt={memoryUpdatedAt}
+            legacySummary={memoryLegacySummary}
           />
         )}
 

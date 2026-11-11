@@ -1,4 +1,5 @@
 import { PROJECT_CONTEXT_MAX_CHARS } from "@/lib/config";
+import { buildMemoryItemsBlock, fetchMemoryItems } from "@/lib/projects/memoryItems";
 import { selectRelevantItems } from "@/lib/projects/selectFiles";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -15,10 +16,10 @@ export async function buildProjectContextBlock(
   projectId: string,
   recentText: string
 ): Promise<string | null> {
-  const [{ data: project }, { data: memory }, { data: files }, { data: documents }, { data: tasks }] =
+  const [{ data: project }, { data: legacyMemory }, { data: files }, { data: documents }, { data: tasks }, memoryItems] =
     await Promise.all([
       supabase.from("projects").select("repo_map").eq("id", projectId).maybeSingle(),
-      supabase.from("project_memory").select("summary, locked_note").eq("project_id", projectId).maybeSingle(),
+      supabase.from("project_memory").select("summary").eq("project_id", projectId).maybeSingle(),
       supabase.from("project_files").select("path, summary, content").eq("project_id", projectId),
       supabase.from("project_documents").select("filename, summary, content").eq("project_id", projectId),
       supabase
@@ -27,6 +28,7 @@ export async function buildProjectContextBlock(
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(80),
+      fetchMemoryItems(supabase, projectId),
     ]);
 
   if (!project) return null;
@@ -67,11 +69,19 @@ export async function buildProjectContextBlock(
           .join("\n")
       : null;
 
+  const itemsBlock = buildMemoryItemsBlock(memoryItems);
+
   const parts: string[] = [];
   if (project.repo_map) parts.push(`Mapa do repositório:\n${project.repo_map}`);
-  if (memory?.locked_note?.trim())
-    parts.push(`Nota fixa do projeto (verdade assentada pelo usuário, nunca a contradiga):\n${memory.locked_note.trim()}`);
-  if (memory?.summary) parts.push(`Memória do projeto (estado real, decisões, pendências):\n${memory.summary}`);
+  if (itemsBlock) {
+    parts.push(
+      `Memória do projeto — itens travados são verdade assentada pelo usuário, nunca os contradiga:\n${itemsBlock}`
+    );
+  } else if (legacyMemory?.summary) {
+    // Projeto ainda sem itens estruturados (de antes desta função existir): cai para o
+    // resumo corrido antigo, só como ponto de partida — não é mais atualizado por aqui.
+    parts.push(`Memória do projeto (nota geral, anterior à memória estruturada):\n${legacyMemory.summary}`);
+  }
   if (tasksBlock) parts.push(`Andamento das tarefas do projeto (todas as reuniões):\n${tasksBlock}`);
   if (filesBlock) parts.push(`Arquivos e documentos relevantes para o assunto atual:\n${filesBlock}`);
 

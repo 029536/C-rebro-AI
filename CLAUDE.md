@@ -206,7 +206,8 @@ Todas as tabelas com Row Level Security. Cada linha pertence a um usuário; filh
 | `project_documents` | Documentos de apoio do projeto (texto extraído de `.pdf`, `.docx` etc.), com hash e resumo |
 | `dev_plans` | Plano de execução gerado a partir de uma reunião |
 | `dev_tasks` | Tarefas do plano (ou rascunhos), com status, nota curta de andamento e o prompt para o Claude Code; `project_id` (opcional) para a tela do projeto listar o andamento de todas as reuniões |
-| `project_memory` | Resumo vivo do projeto (uma linha por projeto): `summary` (mantido pela IA, incremental — atualizado ao encerrar reunião, gerar parecer, gerar plano ou em "Atualizar agora") e `locked_note` (nota fixa editada à mão, que a IA nunca sobrescreve) |
+| `project_memory` | Legado: `summary` (texto corrido, não escrito mais desde que a memória passou a ser por itens) e `locked_note` (idem — migrado para um item travado em `project_memory_items`) |
+| `project_memory_items` | Memória viva do projeto, por item: `tipo` (decisao/pendencia/estado/risco), `texto`, `travado` (a IA nunca altera nem resolve), `resolvido`, `origem_meeting_id`. Atualizada de forma incremental (itens novos/alterados/resolvidos, nunca o texto todo de novo) ao encerrar reunião, gerar parecer, gerar plano ou em "Atualizar agora" |
 | `company_context` | Contexto da empresa, vocabulário e cabeçalho da ata (texto, até 5 linhas), editáveis em Configurações |
 
 Regras: toda mudança de esquema vira uma migração em `supabase/migrations/`; excluir uma reunião ou projeto apaga tudo em cascata; as rotas usam o cliente Supabase da sessão do usuário (RLS ativo). A chave `service_role` não é usada no caminho de usuário e nunca vai para o navegador.

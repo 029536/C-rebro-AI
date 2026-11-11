@@ -11,7 +11,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     notFound();
   }
 
-  const [{ data: files }, { data: documents }, { data: memory }, { data: tasks }, { data: meetings }] =
+  const [{ data: files }, { data: documents }, { data: legacyMemory }, { data: memoryItems }, { data: tasks }, { data: meetings }] =
     await Promise.all([
       supabase
         .from("project_files")
@@ -23,7 +23,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         .select("filename, size_bytes, summary, updated_at")
         .eq("project_id", id)
         .order("filename"),
-      supabase.from("project_memory").select("summary, locked_note, updated_at").eq("project_id", id).maybeSingle(),
+      supabase.from("project_memory").select("summary").eq("project_id", id).maybeSingle(),
+      supabase
+        .from("project_memory_items")
+        .select("id, tipo, texto, travado, resolvido, origem_meeting_id, created_at")
+        .eq("project_id", id)
+        .order("resolvido", { ascending: true })
+        .order("created_at", { ascending: true }),
       supabase
         .from("dev_tasks")
         .select("id, meeting_id, title, priority, status, progress_note")
@@ -41,6 +47,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     ...task,
     meeting_title: meetingTitleById.get(task.meeting_id) ?? "Reunião",
   }));
+  const memoryItemRows = (memoryItems ?? []).map((item) => ({
+    ...item,
+    origem_meeting_title: item.origem_meeting_id ? meetingTitleById.get(item.origem_meeting_id) ?? null : null,
+  }));
+  const memoryUpdatedAt = (memoryItems ?? []).reduce<string | null>(
+    (latest, item) => (!latest || item.created_at > latest ? item.created_at : latest),
+    null
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4">
@@ -49,9 +63,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         projectId={id}
         files={files ?? []}
         documents={documents ?? []}
-        memorySummary={memory?.summary ?? null}
-        memoryLockedNote={memory?.locked_note ?? ""}
-        memoryUpdatedAt={memory?.updated_at ?? null}
+        memoryItems={memoryItemRows}
+        memoryUpdatedAt={memoryUpdatedAt}
+        memoryLegacySummary={legacyMemory?.summary || null}
         tasks={taskRows}
         meetings={meetings ?? []}
       />

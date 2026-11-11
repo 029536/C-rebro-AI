@@ -1,28 +1,54 @@
-import { extractText, getAnthropicClient } from "./anthropic";
-import { projectMemorySystemPrompt, projectMemoryUserMessage } from "./prompts";
+import { memoryChangeSchema, type MemoryChange } from "@/lib/projects/memorySchema";
+import { ExpectedAIError } from "./env";
+import {
+  PROJECT_MEMORY_INPUT_SCHEMA,
+  PROJECT_MEMORY_TOOL_NAME,
+  projectMemoryItemsSystemPrompt,
+  projectMemoryItemsUserMessage,
+} from "./prompts";
+import { callStructuredTool } from "./structuredTool";
 
-const MOCK_SUMMARY = "Resumo vivo simulado do projeto (MOCK_AI=1): decisões, estado real e pendências.";
 const MAX_TOKENS = 2_000;
 
-/** Gera o resumo vivo ATUALIZADO do projeto (CLAUDE_MODEL — é síntese, não rótulo). */
-export async function generateProjectMemory(params: {
-  previousSummary: string | null;
-  lockedNote?: string | null;
+/** O Claude respondeu, mas não no formato esperado — não é falta de chave nem erro de rede. */
+export class ProjectMemoryGenerationError extends ExpectedAIError {}
+
+const MOCK_CHANGE: MemoryChange = {
+  novos: [{ tipo: "estado", texto: "Mudança simulada (MOCK_AI=1): item novo de teste." }],
+  alterados: [],
+  resolvidos: [],
+  observacoes: [],
+};
+
+/**
+ * Gera a DIFERENÇA estruturada da memória do projeto (itens novos, alterados
+ * por id, resolvidos por id) — nunca o texto corrido inteiro. CLAUDE_MODEL
+ * (não o rápido): é síntese de verdade, não um resumo de 1-2 linhas.
+ */
+export async function generateProjectMemoryChanges(params: {
+  currentItemsBlock: string | null;
   meetingTitle: string;
   ataResumo?: string | null;
   parecerResumo?: string | null;
   andamento?: string | null;
-}): Promise<string> {
+}): Promise<MemoryChange> {
   if (process.env.MOCK_AI === "1") {
-    return MOCK_SUMMARY;
+    return MOCK_CHANGE;
   }
 
-  const message = await getAnthropicClient().messages.create({
+  const input = await callStructuredTool({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
-    max_tokens: MAX_TOKENS,
-    system: projectMemorySystemPrompt(),
-    messages: [{ role: "user", content: projectMemoryUserMessage(params) }],
+    maxTokens: MAX_TOKENS,
+    system: projectMemoryItemsSystemPrompt(),
+    messages: [{ role: "user", content: projectMemoryItemsUserMessage(params) }],
+    toolName: PROJECT_MEMORY_TOOL_NAME,
+    toolDescription: "Salva as mudanças estruturadas na memória do projeto.",
+    inputSchema: PROJECT_MEMORY_INPUT_SCHEMA,
   });
 
-  return extractText(message.content);
+  const parsed = memoryChangeSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ProjectMemoryGenerationError("O Claude não devolveu a atualização da memória num formato válido.");
+  }
+  return parsed.data;
 }

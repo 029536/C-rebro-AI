@@ -1,7 +1,7 @@
 // Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009, 0010, 0011,
-// 0012, 0013, 0014, 0015, 0016, 0017, 0018 e 0019 (sem acesso a Docker/Supabase CLI local
-// neste ambiente). Depois que o projeto Supabase existir e as migrações forem aplicadas,
-// regenere com:
+// 0012, 0013, 0014, 0015, 0016, 0017, 0018, 0019 e 0020 (sem acesso a Docker/Supabase CLI
+// local neste ambiente). Depois que o projeto Supabase existir e as migrações forem
+// aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -546,6 +546,47 @@ export type Database = {
         };
         Update: Partial<Database["public"]["Tables"]["user_settings"]["Insert"]>;
         Relationships: [];
+      };
+      project_memory_items: {
+        Row: {
+          id: string;
+          project_id: string;
+          tipo: "decisao" | "pendencia" | "estado" | "risco";
+          texto: string;
+          travado: boolean;
+          resolvido: boolean;
+          origem_meeting_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          tipo: "decisao" | "pendencia" | "estado" | "risco";
+          texto: string;
+          travado?: boolean;
+          resolvido?: boolean;
+          origem_meeting_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["project_memory_items"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "project_memory_items_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "project_memory_items_origem_meeting_id_fkey";
+            columns: ["origem_meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       company_context: {
         Row: {
