@@ -1,6 +1,7 @@
 // Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009, 0010, 0011,
-// 0012, 0013, 0014, 0015, 0016, 0017 e 0018 (sem acesso a Docker/Supabase CLI local neste
-// ambiente). Depois que o projeto Supabase existir e as migrações forem aplicadas, regenere com:
+// 0012, 0013, 0014, 0015, 0016, 0017, 0018 e 0019 (sem acesso a Docker/Supabase CLI local
+// neste ambiente). Depois que o projeto Supabase existir e as migrações forem aplicadas,
+// regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -510,11 +511,13 @@ export type Database = {
         Row: {
           project_id: string;
           summary: string;
+          locked_note: string;
           updated_at: string;
         };
         Insert: {
           project_id: string;
           summary?: string;
+          locked_note?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["project_memory"]["Insert"]>;

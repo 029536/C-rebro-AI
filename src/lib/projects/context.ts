@@ -18,7 +18,7 @@ export async function buildProjectContextBlock(
   const [{ data: project }, { data: memory }, { data: files }, { data: documents }, { data: tasks }] =
     await Promise.all([
       supabase.from("projects").select("repo_map").eq("id", projectId).maybeSingle(),
-      supabase.from("project_memory").select("summary").eq("project_id", projectId).maybeSingle(),
+      supabase.from("project_memory").select("summary, locked_note").eq("project_id", projectId).maybeSingle(),
       supabase.from("project_files").select("path, summary, content").eq("project_id", projectId),
       supabase.from("project_documents").select("filename, summary, content").eq("project_id", projectId),
       supabase
@@ -69,6 +69,8 @@ export async function buildProjectContextBlock(
 
   const parts: string[] = [];
   if (project.repo_map) parts.push(`Mapa do repositório:\n${project.repo_map}`);
+  if (memory?.locked_note?.trim())
+    parts.push(`Nota fixa do projeto (verdade assentada pelo usuário, nunca a contradiga):\n${memory.locked_note.trim()}`);
   if (memory?.summary) parts.push(`Memória do projeto (estado real, decisões, pendências):\n${memory.summary}`);
   if (tasksBlock) parts.push(`Andamento das tarefas do projeto (todas as reuniões):\n${tasksBlock}`);
   if (filesBlock) parts.push(`Arquivos e documentos relevantes para o assunto atual:\n${filesBlock}`);

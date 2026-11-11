@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const generateProjectMemory = vi.fn();
 vi.mock("@/lib/ai/projectMemory", () => ({ generateProjectMemory }));
 
-const { updateProjectMemoryAfterMeeting } = await import("@/lib/projects/memory");
+const { updateProjectMemoryAfterMeeting, refreshProjectMemory } = await import("@/lib/projects/memory");
 
 afterEach(() => {
   generateProjectMemory.mockReset();
@@ -40,8 +40,8 @@ const VALID_MINUTES_CONTENT = {
 };
 
 function makeSupabaseStub(params: {
-  meeting: { id: string; title: string; project_id: string | null };
-  previousMemory?: { summary: string } | null;
+  meeting: { id: string; title: string; project_id: string | null } | null;
+  previousMemory?: { summary: string; locked_note?: string } | null;
   minutes?: { status: string; content: unknown } | null;
   review?: { status: string; content: unknown } | null;
   tasks?: { title: string; status: string; progress_note: string }[];
@@ -116,5 +116,90 @@ describe("updateProjectMemoryAfterMeeting", () => {
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(updateProjectMemoryAfterMeeting(supabase as any, "m1")).resolves.toBeUndefined();
+  });
+
+  it("passa a nota fixa (locked_note) para a geração, sem a reescrever", async () => {
+    generateProjectMemory.mockResolvedValue("Resumo novo.");
+    const { supabase } = makeSupabaseStub({
+      meeting: { id: "m1", title: "Reunião", project_id: "p1" },
+      previousMemory: { summary: "Resumo antigo.", locked_note: "O prazo final é 30/03." },
+      minutes: { status: "ready", content: VALID_MINUTES_CONTENT },
+      tasks: [],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await updateProjectMemoryAfterMeeting(supabase as any, "m1");
+    expect(generateProjectMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ lockedNote: "O prazo final é 30/03." })
+    );
+  });
+
+  it("sem conteúdo novo desta reunião e sem force, não chama o Claude mesmo havendo resumo anterior", async () => {
+    const { supabase } = makeSupabaseStub({
+      meeting: { id: "m1", title: "Reunião", project_id: "p1" },
+      previousMemory: { summary: "Resumo antigo." },
+      minutes: null,
+      review: null,
+      tasks: [],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await updateProjectMemoryAfterMeeting(supabase as any, "m1");
+    expect(generateProjectMemory).not.toHaveBeenCalled();
+  });
+
+  it("com force=true, atualiza mesmo sem conteúdo novo desta reunião, se houver resumo anterior", async () => {
+    generateProjectMemory.mockResolvedValue("Resumo revalidado.");
+    const { supabase, upserts } = makeSupabaseStub({
+      meeting: { id: "m1", title: "Reunião", project_id: "p1" },
+      previousMemory: { summary: "Resumo antigo." },
+      minutes: null,
+      review: null,
+      tasks: [],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await updateProjectMemoryAfterMeeting(supabase as any, "m1", { force: true });
+    expect(generateProjectMemory).toHaveBeenCalledTimes(1);
+    expect(upserts).toHaveLength(1);
+  });
+
+  it("com force=true mas sem absolutamente nada (projeto novo), ainda não chama o Claude", async () => {
+    const { supabase } = makeSupabaseStub({
+      meeting: { id: "m1", title: "Reunião", project_id: "p1" },
+      previousMemory: null,
+      minutes: null,
+      review: null,
+      tasks: [],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await updateProjectMemoryAfterMeeting(supabase as any, "m1", { force: true });
+    expect(generateProjectMemory).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshProjectMemory", () => {
+  it("devolve erro claro quando o projeto ainda não tem nenhuma reunião", async () => {
+    const { supabase } = makeSupabaseStub({ meeting: null });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await refreshProjectMemory(supabase as any, "p1");
+    expect(result).toEqual({
+      ok: false,
+      error: "Este projeto ainda não tem reuniões para basear a memória.",
+    });
+    expect(generateProjectMemory).not.toHaveBeenCalled();
+  });
+
+  it("atualiza com base na reunião mais recente do projeto, forçando mesmo sem conteúdo novo", async () => {
+    generateProjectMemory.mockResolvedValue("Resumo revalidado.");
+    const { supabase, upserts } = makeSupabaseStub({
+      meeting: { id: "m1", title: "Reunião", project_id: "p1" },
+      previousMemory: { summary: "Resumo antigo." },
+      minutes: null,
+      review: null,
+      tasks: [],
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await refreshProjectMemory(supabase as any, "p1");
+    expect(result).toEqual({ ok: true });
+    expect(generateProjectMemory).toHaveBeenCalledTimes(1);
+    expect(upserts).toHaveLength(1);
   });
 });

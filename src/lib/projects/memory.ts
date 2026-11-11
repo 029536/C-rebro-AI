@@ -13,7 +13,11 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
  * ir incorporando cada peça assim que existir. Nunca lança: uma falha aqui
  * (rede, chave, etc.) não deve derrubar a ação principal que a chamou.
  */
-export async function updateProjectMemoryAfterMeeting(supabase: Supabase, meetingId: string): Promise<void> {
+export async function updateProjectMemoryAfterMeeting(
+  supabase: Supabase,
+  meetingId: string,
+  options: { force?: boolean } = {}
+): Promise<void> {
   try {
     const { data: meeting } = await supabase
       .from("meetings")
@@ -25,7 +29,11 @@ export async function updateProjectMemoryAfterMeeting(supabase: Supabase, meetin
 
     const [{ data: previousMemory }, { data: minutesRow }, { data: reviewRow }, { data: tasks }] =
       await Promise.all([
-        supabase.from("project_memory").select("summary").eq("project_id", meeting.project_id).maybeSingle(),
+        supabase
+          .from("project_memory")
+          .select("summary, locked_note")
+          .eq("project_id", meeting.project_id)
+          .maybeSingle(),
         supabase
           .from("meeting_minutes")
           .select("status, content")
@@ -51,9 +59,15 @@ export async function updateProjectMemoryAfterMeeting(supabase: Supabase, meetin
       minutesRow?.status === "ready" ? minutesDocumentSchema.safeParse(minutesRow.content) : null;
     const reviewParsed =
       reviewRow?.status === "ready" ? reviewContentSchema.safeParse(reviewRow.content) : null;
+    const lockedNote = previousMemory?.locked_note?.trim() || null;
 
-    // Nada novo ainda para incorporar (reunião recém-criada, sem ata/parecer/tarefas) — não vale a chamada.
-    if (!ataParsed?.success && !reviewParsed?.success && (tasks ?? []).length === 0) return;
+    const hasNewFromThisMeeting = Boolean(ataParsed?.success || reviewParsed?.success || (tasks ?? []).length > 0);
+    const hasAnythingAtAll = hasNewFromThisMeeting || Boolean(lockedNote) || Boolean(previousMemory?.summary);
+
+    // Nada mesmo para trabalhar (projeto novo, sem ata/parecer/tarefas/nota/resumo): não vale a chamada.
+    if (!hasAnythingAtAll) return;
+    // Nada NOVO desta reunião: só atualiza se foi um pedido explícito de "Atualizar agora".
+    if (!hasNewFromThisMeeting && !options.force) return;
 
     const andamento =
       (tasks ?? []).length > 0
@@ -64,6 +78,7 @@ export async function updateProjectMemoryAfterMeeting(supabase: Supabase, meetin
 
     const summary = await generateProjectMemory({
       previousSummary: previousMemory?.summary ?? null,
+      lockedNote,
       meetingTitle: meeting.title,
       ataResumo: ataParsed?.success ? ataParsed.data.resumo_executivo : null,
       parecerResumo: reviewParsed?.success
@@ -80,4 +95,29 @@ export async function updateProjectMemoryAfterMeeting(supabase: Supabase, meetin
   } catch (error) {
     console.error("Falha ao atualizar a memória do projeto:", redactSecrets(String(error)));
   }
+}
+
+export type RefreshMemoryResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * "Atualizar agora" (tela do projeto): roda a mesma atualização incremental,
+ * tomando a reunião mais recente do projeto como base — o resumo que ela já
+ * carrega reflete as reuniões anteriores, então isso sempre resulta num
+ * resumo atualizado com o estado mais recente de tudo.
+ */
+export async function refreshProjectMemory(supabase: Supabase, projectId: string): Promise<RefreshMemoryResult> {
+  const { data: latestMeeting } = await supabase
+    .from("meetings")
+    .select("id")
+    .eq("project_id", projectId)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latestMeeting) {
+    return { ok: false, error: "Este projeto ainda não tem reuniões para basear a memória." };
+  }
+
+  await updateProjectMemoryAfterMeeting(supabase, latestMeeting.id, { force: true });
+  return { ok: true };
 }

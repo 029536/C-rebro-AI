@@ -4,6 +4,7 @@ import { Brain, Calendar, FileText, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { ProjectManager } from "@/components/ProjectManager";
+import { ProjectMemoryPanel } from "@/components/ProjectMemoryPanel";
 import { ProjectTaskCard, type ProjectTaskRow } from "@/components/ProjectTaskCard";
 import { formatDateTime } from "@/lib/format";
 
@@ -25,6 +26,8 @@ export function ProjectTabs({
   files,
   documents,
   memorySummary,
+  memoryLockedNote,
+  memoryUpdatedAt,
   tasks,
   meetings,
 }: {
@@ -32,6 +35,8 @@ export function ProjectTabs({
   files: ProjectFileRow[];
   documents: ProjectDocumentRow[];
   memorySummary: string | null;
+  memoryLockedNote: string;
+  memoryUpdatedAt: string | null;
   tasks: ProjectTaskRow[];
   meetings: ProjectMeetingRow[];
 }) {
@@ -65,16 +70,12 @@ export function ProjectTabs({
         )}
 
         {active === "memoria" && (
-          <div className="flex flex-col gap-2">
-            {memorySummary ? (
-              <p className="whitespace-pre-wrap text-sm text-text">{memorySummary}</p>
-            ) : (
-              <p className="text-text-secondary">
-                Ainda não há memória deste projeto — ela é construída sozinha ao encerrar reuniões
-                ligadas a ele.
-              </p>
-            )}
-          </div>
+          <ProjectMemoryPanel
+            projectId={projectId}
+            initialSummary={memorySummary ?? ""}
+            initialLockedNote={memoryLockedNote}
+            initialUpdatedAt={memoryUpdatedAt}
+          />
         )}
 
         {active === "tarefas" && (

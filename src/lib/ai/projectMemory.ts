@@ -7,6 +7,7 @@ const MAX_TOKENS = 2_000;
 /** Gera o resumo vivo ATUALIZADO do projeto (CLAUDE_MODEL — é síntese, não rótulo). */
 export async function generateProjectMemory(params: {
   previousSummary: string | null;
+  lockedNote?: string | null;
   meetingTitle: string;
   ataResumo?: string | null;
   parecerResumo?: string | null;

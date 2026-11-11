@@ -23,7 +23,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         .select("filename, size_bytes, summary, updated_at")
         .eq("project_id", id)
         .order("filename"),
-      supabase.from("project_memory").select("summary").eq("project_id", id).maybeSingle(),
+      supabase.from("project_memory").select("summary, locked_note, updated_at").eq("project_id", id).maybeSingle(),
       supabase
         .from("dev_tasks")
         .select("id, meeting_id, title, priority, status, progress_note")
@@ -50,6 +50,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         files={files ?? []}
         documents={documents ?? []}
         memorySummary={memory?.summary ?? null}
+        memoryLockedNote={memory?.locked_note ?? ""}
+        memoryUpdatedAt={memory?.updated_at ?? null}
         tasks={taskRows}
         meetings={meetings ?? []}
       />
