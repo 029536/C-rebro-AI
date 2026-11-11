@@ -7,11 +7,8 @@
  */
 export const CHUNK_SECONDS = 27;
 
-/**
- * Duração de uma "parte" de reunião longa, em minutos, antes de gerar um checkpoint.
- * TEMPORÁRIO EM 1 PARA O TESTE ACELERADO DA FASE 3 — voltar para 45 depois.
- */
-export const PART_MINUTES = 1;
+/** Duração de uma "parte" de reunião longa, em minutos, antes de gerar um checkpoint. */
+export const PART_MINUTES = 45;
 
 /** Tamanho máximo (em caracteres) da transcrição completa para caber inteira no contexto do parecer/plano, em vez de usar checkpoints. */
 export const FULL_TRANSCRIPT_MAX_CHARS = 80_000;
