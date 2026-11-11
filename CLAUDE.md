@@ -26,7 +26,7 @@ Uso principal: **celular e tablet**, em reuniões presenciais (aparelho na mesa)
 - **Transcrição: OpenAI** (`whisper-1`, configurável em `TRANSCRIBE_MODEL`).
 - **Raciocínio: Anthropic Claude.** `CLAUDE_MODEL` (padrão `claude-sonnet-5-5`) para copiloto, parecer, chat e plano; `CLAUDE_FAST_MODEL` (padrão `claude-haiku-5-5`) para tarefas baratas e repetitivas (resumo de arquivos, escolha de arquivos relevantes, checkpoints). A API da Anthropic não aceita áudio, por isso a transcrição é separada.
 - **Provedores atrás de uma interface** (`lib/ai`): hoje Anthropic e OpenAI; um provedor Gemini pode ser acrescentado depois sem mexer no resto. Não implemente Gemini na v1.
-- Bibliotecas sugeridas: `@supabase/ssr`, `@anthropic-ai/sdk`, `openai`, `zod`, `fflate` (zip no navegador), `vitest`, `lucide-react` (ícones). Para extrair texto de documentos no navegador: `pdfjs-dist` (PDF) e `mammoth` (`.docx`); `.md`, `.txt` e `.csv` são lidos direto. Confirme as versões atuais antes de instalar.
+- Bibliotecas sugeridas: `@supabase/ssr`, `@anthropic-ai/sdk`, `openai`, `zod`, `fflate` (zip no navegador), `vitest`, `lucide-react` (ícones). Para extrair texto de documentos no navegador: `pdfjs-dist` (PDF) e `mammoth` (`.docx`); `.md`, `.txt` e `.csv` são lidos direto. `docx` para gerar o `.docx` real (OOXML) da ata, no navegador. Confirme as versões atuais antes de instalar.
 - **PWA mobile-first**: instalável na tela inicial do celular.
 - Isto substitui um protótipo anterior em Flask. A lógica e os prompts foram portados; não recrie o Flask.
 
@@ -91,7 +91,7 @@ Objetivo: um registro **fiel** do que foi dito, gerado sozinho ao encerrar a gra
   4. Transcrição muito curta, sem sentido, ou dominada por outro alfabeto (Whisper "alucinando" em cima de áudio mudo): **não gerar ata** — falhar com mensagem honesta e botão "Tentar de novo", sem inventar conteúdo.
 - Estados (`meeting_minutes.status`): `pending` → `generating` → `ready` ou `error`. O cartão da reunião mostra isso (Transcrevendo/Gerando ata/Pronta/Erro).
 - Pode regenerar sem regravar (nova linha em `meeting_minutes`, vale a mais recente) e editar manualmente o texto formal (`edited_ata_formal`, sem precisar da IA).
-- Exportação é só do navegador: PDF via impressão (HTML limpo, tema claro sempre), DOCX gerado no navegador (cabeçalho em **tabela**, nunca flexbox; imagem com `width`/`height` como atributo, não CSS — regra aprendida do sistema anterior), copiar texto, compartilhar (Web Share API no celular, `mailto:` como alternativa).
+- Exportação é só do navegador: PDF via impressão (HTML limpo, tema claro sempre, cabeçalho em **tabela**, nunca flexbox; imagem com `width`/`height` como atributo, não CSS — regra aprendida do sistema anterior), DOCX real (OOXML, biblioteca `docx`, com estilos de Título/Heading, margens A4), copiar texto, compartilhar (Web Share API no celular, `mailto:` como alternativa).
 - Cabeçalho institucional (`company_context.letterhead`, até 5 linhas de texto, com logo opcional em `company_context.letterhead_logo`) é editável em Configurações e entra no topo do documento exibido e exportado. Sem Supabase Storage na v1: o logo, pequeno (até 150 KB), é guardado como data URI direto na linha — não é um arquivo em bucket nem em disco.
 
 ## Memória entre reuniões

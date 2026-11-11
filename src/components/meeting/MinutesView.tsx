@@ -13,6 +13,8 @@ export function MinutesView({
   letterhead?: Letterhead;
 }) {
   const ataFormal = document.ata_formal;
+  const resolvedLetterhead = letterhead ?? { text: "", logo: null };
+  const hasLetterhead = Boolean(resolvedLetterhead.text || resolvedLetterhead.logo);
 
   return (
     <div className="flex flex-col gap-3">
@@ -23,19 +25,17 @@ export function MinutesView({
         </p>
       )}
 
-      {!isExample && letterhead && (letterhead.text || letterhead.logo) && (
-        <MinutesExportBar ataFormal={ataFormal} titulo={document.titulo} letterhead={letterhead} />
-      )}
+      {!isExample && <MinutesExportBar document={document} letterhead={resolvedLetterhead} />}
 
       <div className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-        {letterhead && (letterhead.text || letterhead.logo) && (
+        {hasLetterhead && (
           <div className="mb-4 flex items-center gap-3 border-b border-border pb-4">
-            {letterhead.logo && (
+            {resolvedLetterhead.logo && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={letterhead.logo} alt="Logo" className="h-10 w-auto" />
+              <img src={resolvedLetterhead.logo} alt="Logo" className="h-10 w-auto" />
             )}
-            {letterhead.text && (
-              <p className="whitespace-pre-wrap text-xs text-text-secondary">{letterhead.text}</p>
+            {resolvedLetterhead.text && (
+              <p className="whitespace-pre-wrap text-xs text-text-secondary">{resolvedLetterhead.text}</p>
             )}
           </div>
         )}
