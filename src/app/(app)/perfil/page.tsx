@@ -1,5 +1,6 @@
 import { Archive, ChevronRight, FolderOpen, Settings } from "lucide-react";
 import Link from "next/link";
+import { UserSettingsForm } from "@/components/UserSettingsForm";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 
@@ -9,6 +10,12 @@ export default async function PerfilPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const email = user?.email ?? "";
+
+  const { data: settingsRow } = await supabase
+    .from("user_settings")
+    .select("default_auto_opine, chunk_seconds")
+    .maybeSingle();
+  const settings = settingsRow ?? { default_auto_opine: false, chunk_seconds: 27 };
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4">
@@ -21,6 +28,8 @@ export default async function PerfilPage() {
           <p className="text-sm text-text-secondary">Saber Crescer</p>
         </div>
       </div>
+
+      <UserSettingsForm initial={settings} />
 
       <nav className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <Link href="/configuracoes" className="flex min-h-14 items-center justify-between px-4 text-text">

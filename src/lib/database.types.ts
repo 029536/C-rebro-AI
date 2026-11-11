@@ -1,6 +1,6 @@
 // Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009, 0010, 0011,
-// 0012, 0013 e 0014 (sem acesso a Docker/Supabase CLI local neste ambiente). Depois que o
-// projeto Supabase existir e as migrações forem aplicadas, regenere com:
+// 0012, 0013, 0014, 0015 e 0016 (sem acesso a Docker/Supabase CLI local neste ambiente).
+// Depois que o projeto Supabase existir e as migrações forem aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -528,6 +528,22 @@ export type Database = {
           },
         ];
       };
+      user_settings: {
+        Row: {
+          owner_id: string;
+          default_auto_opine: boolean;
+          chunk_seconds: number;
+          updated_at: string;
+        };
+        Insert: {
+          owner_id?: string;
+          default_auto_opine?: boolean;
+          chunk_seconds?: number;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["user_settings"]["Insert"]>;
+        Relationships: [];
+      };
       company_context: {
         Row: {
           owner_id: string;
@@ -560,6 +576,10 @@ export type Database = {
       set_updated_at: {
         Args: Record<string, never>;
         Returns: unknown;
+      };
+      search_meetings_content: {
+        Args: { search_query: string };
+        Returns: { kind: string; meeting_id: string; title: string; snippet: string; rank: number }[];
       };
     };
     Enums: Record<string, never>;

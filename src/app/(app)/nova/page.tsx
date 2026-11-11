@@ -30,6 +30,16 @@ function NovaReuniaoContent() {
   );
   const [resuming, setResuming] = useState(Boolean(resumeMeetingId) && !freshTitle);
   const [error, setError] = useState(false);
+  const [userSettings, setUserSettings] = useState<{ default_auto_opine: boolean; chunk_seconds: number } | null>(
+    null
+  );
+
+  useEffect(() => {
+    fetch("/api/user-settings")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setUserSettings(data ?? null))
+      .catch(() => setUserSettings(null));
+  }, []);
 
   useEffect(() => {
     if (!resumeMeetingId || freshTitle) return;
@@ -118,6 +128,8 @@ function NovaReuniaoContent() {
       meetingTitle={session.meetingTitle}
       initialPartNo={session.initialPartNo}
       initialIdx={session.initialIdx}
+      defaultAutoOpine={userSettings?.default_auto_opine}
+      chunkSeconds={userSettings?.chunk_seconds}
     />
   );
 }

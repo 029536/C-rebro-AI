@@ -55,11 +55,16 @@ export function Recorder({
   meetingTitle,
   initialPartNo = 1,
   initialIdx = 0,
+  defaultAutoOpine,
+  chunkSeconds,
 }: {
   meetingId: string;
   meetingTitle: string;
   initialPartNo?: number;
   initialIdx?: number;
+  /** Padrão salvo em Perfil (Configurações) — só se aplica quando este aparelho nunca escolheu antes. */
+  defaultAutoOpine?: boolean;
+  chunkSeconds?: number;
 }) {
   const router = useRouter();
   const [consentGiven, setConsentGiven] = useState(
@@ -67,10 +72,25 @@ export function Recorder({
   );
   const [showConsent, setShowConsent] = useState(false);
   const [status, setStatus] = useState<"idle" | "recording" | "finishing">("idle");
-  // O copiloto é manual por padrão — o interruptor lembra a última escolha.
+  // O copiloto é manual por padrão — o interruptor lembra a última escolha deste aparelho.
+  // Captura ANTES de qualquer efeito rodar, para saber se já existia escolha salva
+  // (o efeito abaixo grava "0"/"1" a cada mudança, inclusive na primeira). Em estado
+  // (não ref): refs não podem ser lidos durante a renderização.
+  const [hadStoredAutoOpine] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(AUTO_OPINE_KEY) !== null
+  );
   const [autoOpine, setAutoOpine] = useState(
     () => typeof window !== "undefined" && localStorage.getItem(AUTO_OPINE_KEY) === "1"
   );
+
+  // Sem escolha salva neste aparelho ainda: aplica o padrão de Perfil assim que
+  // chegar, uma única vez — ajuste durante a renderização (não em efeito, para
+  // não disparar um render em cascata), com guarda de estado para não repetir.
+  const [appliedDefaultAutoOpine, setAppliedDefaultAutoOpine] = useState(false);
+  if (!hadStoredAutoOpine && !appliedDefaultAutoOpine && defaultAutoOpine) {
+    setAppliedDefaultAutoOpine(true);
+    setAutoOpine(true);
+  }
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
@@ -290,6 +310,7 @@ export function Recorder({
     wakeLockRef.current = await requestWakeLock();
 
     const recorder = new MeetingRecorder({
+      chunkSeconds,
       onTick: (seconds) => {
         elapsedSecondsRef.current = seconds;
         setElapsedSeconds(seconds);
