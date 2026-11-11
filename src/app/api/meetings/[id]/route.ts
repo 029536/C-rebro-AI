@@ -22,6 +22,7 @@ const patchSchema = z.discriminatedUnion("action", [
     client_name: z.string().trim().max(200).nullable().optional(),
     participants: participantsSchema.optional(),
     context: z.string().trim().max(2000).nullable().optional(),
+    project_id: z.uuid().nullable().optional(),
   }),
 ]);
 
@@ -87,6 +88,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (fields.client_name !== undefined) update.client_name = fields.client_name;
     if (fields.participants !== undefined) update.participants = fields.participants;
     if (fields.context !== undefined) update.context = fields.context;
+
+    if (fields.project_id !== undefined) {
+      if (fields.project_id === null) {
+        update.project_id = null;
+      } else {
+        // Só aceita o project_id se o projeto for mesmo do usuário (RLS decide isso sozinha).
+        const { data: project } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("id", fields.project_id)
+          .maybeSingle();
+        update.project_id = project?.id ?? null;
+      }
+    }
 
     const { error: updateError } = await supabase.from("meetings").update(update).eq("id", id);
     if (updateError) {

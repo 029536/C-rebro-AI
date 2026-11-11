@@ -27,6 +27,7 @@ export function MeetingSetupSection({
         client_name: newValue.client_name.trim() || null,
         participants: newValue.participants,
         context: newValue.context.trim() || null,
+        project_id: newValue.project_id,
       }),
     });
     setEditing(false);
