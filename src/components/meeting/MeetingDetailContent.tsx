@@ -81,10 +81,12 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
     .eq("meeting_id", meetingId)
     .order("created_at", { ascending: true });
 
-  const [currentPlan, chatHistory] = await Promise.all([
+  const [currentPlan, chatHistory, { data: companyContext }] = await Promise.all([
     fetchCurrentPlan(supabase, meetingId),
     fetchChatHistory(supabase, meetingId),
+    supabase.from("company_context").select("letterhead, letterhead_logo").maybeSingle(),
   ]);
+  const letterhead = { text: companyContext?.letterhead ?? "", logo: companyContext?.letterhead_logo ?? null };
   const plan: PlanState = currentPlan ? { summary: currentPlan.plan.summary, tasks: currentPlan.tasks } : null;
   const chatHasContent =
     (minutesRow?.status === "ready" && minutesRow.content !== null) ||
@@ -183,6 +185,7 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
         meetingId={meetingId}
         meetingStatus={meeting.status}
         minutes={minutes}
+        letterhead={letterhead}
         review={review}
         plan={plan}
         chatMessages={chatHistory}

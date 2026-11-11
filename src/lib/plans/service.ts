@@ -6,7 +6,7 @@ import {
 import { buildContext } from "@/lib/ai/context";
 import { redactSecrets } from "@/lib/ai/env";
 import { generatePlanContent } from "@/lib/ai/plan";
-import { buildMeetingContextBlock } from "@/lib/ai/prompts";
+import { buildMeetingContextBlock, combineCompanyContext } from "@/lib/ai/prompts";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
@@ -130,7 +130,7 @@ export async function generateMeetingPlan(
       .eq("meeting_id", meetingId)
       .order("idx", { ascending: true }),
     supabase.from("meeting_checkpoints").select("part_no, summary").eq("meeting_id", meetingId),
-    supabase.from("company_context").select("context").maybeSingle(),
+    supabase.from("company_context").select("context, vocabulary").maybeSingle(),
     supabase
       .from("meeting_minutes")
       .select("status, content")
@@ -207,7 +207,7 @@ export async function generateMeetingPlan(
 
   try {
     const content = await generatePlanContent({
-      companyContext: companyContext?.context ?? "",
+      companyContext: combineCompanyContext(companyContext),
       meetingContext: meetingContext || undefined,
       ataFormal,
       reviewSummary,

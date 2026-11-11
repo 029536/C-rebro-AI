@@ -1,7 +1,7 @@
 import { describeAnthropicError, describeAnthropicErrorDetail, statusForAnthropicError } from "@/lib/ai/anthropic";
 import { selectRecentTranscript } from "@/lib/ai/context";
 import { generateOpinion } from "@/lib/ai/copilot";
-import { buildMeetingContextBlock } from "@/lib/ai/prompts";
+import { buildMeetingContextBlock, combineCompanyContext } from "@/lib/ai/prompts";
 import type { CopilotKind } from "@/lib/ai/prompts";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { participantsSchema } from "@/lib/participants";
@@ -51,7 +51,7 @@ export async function generateMeetingOpinion(
         .select("transcript, audio_seconds")
         .eq("meeting_id", meetingId)
         .order("idx", { ascending: true }),
-      supabase.from("company_context").select("context").maybeSingle(),
+      supabase.from("company_context").select("context, vocabulary").maybeSingle(),
       supabase
         .from("meeting_checkpoints")
         .select("summary")
@@ -112,7 +112,7 @@ export async function generateMeetingOpinion(
   try {
     const text = await generateOpinion({
       kind: params.kind,
-      companyContext: companyContext?.context ?? "",
+      companyContext: combineCompanyContext(companyContext),
       meetingContext: meetingContext || undefined,
       summary: latestCheckpoint?.summary ?? null,
       previousOpinion: previousOpinionRow?.text ?? null,

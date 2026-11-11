@@ -6,7 +6,7 @@ import {
 import { buildContext } from "@/lib/ai/context";
 import { redactSecrets } from "@/lib/ai/env";
 import { generateMinutesContent } from "@/lib/ai/minutes";
-import { buildMeetingContextBlock } from "@/lib/ai/prompts";
+import { buildMeetingContextBlock, combineCompanyContext } from "@/lib/ai/prompts";
 import { formatISODate, formatTime } from "@/lib/format";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
@@ -57,7 +57,7 @@ export async function generateMeetingMinutes(
       .eq("meeting_id", meetingId)
       .order("idx", { ascending: true }),
     supabase.from("meeting_checkpoints").select("part_no, summary").eq("meeting_id", meetingId),
-    supabase.from("company_context").select("context").maybeSingle(),
+    supabase.from("company_context").select("context, vocabulary").maybeSingle(),
   ]);
 
   const allChunks = chunks ?? [];
@@ -147,7 +147,7 @@ export async function generateMeetingMinutes(
 
   try {
     const content = await generateMinutesContent({
-      companyContext: companyContext?.context ?? "",
+      companyContext: combineCompanyContext(companyContext),
       meetingType: meeting.meeting_type,
       clientName: meeting.meeting_type === "internal" ? null : meeting.client_name,
       participants,

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { describeAnthropicError, statusForAnthropicError } from "@/lib/ai/anthropic";
 import { generateCheckpoint } from "@/lib/ai/checkpoint";
-import { buildMeetingContextBlock } from "@/lib/ai/prompts";
+import { buildMeetingContextBlock, combineCompanyContext } from "@/lib/ai/prompts";
 import { participantsSchema } from "@/lib/participants";
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq("meeting_id", meetingId)
       .eq("part_no", partNo - 1)
       .maybeSingle(),
-    supabase.from("company_context").select("context").maybeSingle(),
+    supabase.from("company_context").select("context, vocabulary").maybeSingle(),
     supabase
       .from("meetings")
       .select("meeting_type, client_name, participants, context")
@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let summary: string;
   try {
     summary = await generateCheckpoint({
-      companyContext: companyContext?.context ?? "",
+      companyContext: combineCompanyContext(companyContext),
       meetingContext: meetingContext || undefined,
       previousSummary: previousCheckpoint?.summary ?? null,
       transcript,

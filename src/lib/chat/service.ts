@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { buildContext } from "@/lib/ai/context";
-import { chatSystemPrompt } from "@/lib/ai/prompts";
+import { chatSystemPrompt, combineCompanyContext } from "@/lib/ai/prompts";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { buildSessionChain } from "@/lib/meetings";
 import { participantsSchema } from "@/lib/participants";
@@ -95,7 +95,7 @@ export async function buildChatContext(
       .select("role, content, created_at")
       .in("meeting_id", chainIds)
       .order("created_at", { ascending: true }),
-    supabase.from("company_context").select("context").maybeSingle(),
+    supabase.from("company_context").select("context, vocabulary").maybeSingle(),
   ]);
 
   const meetings = meetingsRows ?? [];
@@ -194,7 +194,7 @@ export async function buildChatContext(
       : null;
 
   const system = chatSystemPrompt({
-    companyContext: companyContext?.context ?? "",
+    companyContext: combineCompanyContext(companyContext),
     sessionsBlock: sessionsBlock || "Nenhuma sessão com conteúdo ainda.",
     andamentoBlock,
   });

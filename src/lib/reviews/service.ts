@@ -5,7 +5,7 @@ import {
 } from "@/lib/ai/anthropic";
 import { buildContext } from "@/lib/ai/context";
 import { redactSecrets } from "@/lib/ai/env";
-import { buildMeetingContextBlock } from "@/lib/ai/prompts";
+import { buildMeetingContextBlock, combineCompanyContext } from "@/lib/ai/prompts";
 import { generateReviewContent } from "@/lib/ai/review";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
@@ -58,7 +58,7 @@ export async function generateMeetingReview(
         .eq("meeting_id", meetingId)
         .order("idx", { ascending: true }),
       supabase.from("meeting_checkpoints").select("part_no, summary").eq("meeting_id", meetingId),
-      supabase.from("company_context").select("context").maybeSingle(),
+      supabase.from("company_context").select("context, vocabulary").maybeSingle(),
       supabase
         .from("meeting_minutes")
         .select("status, content")
@@ -155,7 +155,7 @@ export async function generateMeetingReview(
 
   try {
     const content = await generateReviewContent({
-      companyContext: companyContext?.context ?? "",
+      companyContext: combineCompanyContext(companyContext),
       meetingContext: meetingContext || undefined,
       ataFormal,
       projectContext,

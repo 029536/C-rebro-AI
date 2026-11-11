@@ -36,6 +36,19 @@ export function buildMeetingContextBlock(params: {
   return lines.join(" ");
 }
 
+/**
+ * Junta o contexto livre da empresa com o vocabulário (termos, nomes, siglas —
+ * Configurações) numa única string, para grafar nomes certo em toda chamada de
+ * IA (ata, parecer, plano, copiloto, chat). O Whisper usa o vocabulário à
+ * parte (lib/ai/transcribe.ts); aqui é só para os prompts de texto.
+ */
+export function combineCompanyContext(row: { context?: string | null; vocabulary?: string | null } | null): string {
+  const vocabularyLine = row?.vocabulary?.trim()
+    ? `Vocabulário, nomes próprios e siglas da empresa (grafe exatamente assim): ${row.vocabulary.trim()}`
+    : "";
+  return [row?.context?.trim(), vocabularyLine].filter(Boolean).join("\n\n");
+}
+
 export function checkpointSystemPrompt(companyContext: string, meetingContext?: string): string {
   const meetingContextLine = meetingContext
     ? `\n\n${meetingContext}\nUse os nomes das pessoas acima exatamente como foram informados, sem adaptar ou inventar variações.`

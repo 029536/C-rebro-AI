@@ -17,7 +17,7 @@ import { useState } from "react";
 import { ChatBox, type ChatMessage } from "@/components/meeting/ChatBox";
 import { GenerateMinutesButton } from "@/components/meeting/GenerateMinutesButton";
 import { GenerateReviewButton } from "@/components/meeting/GenerateReviewButton";
-import { MinutesView } from "@/components/meeting/MinutesView";
+import { MinutesView, type Letterhead } from "@/components/meeting/MinutesView";
 import { PlanView, type PlanState } from "@/components/meeting/PlanView";
 import { OpinionCard, type OpinionKind } from "@/components/OpinionCard";
 import { formatDateTime, formatOffset, formatTime } from "@/lib/format";
@@ -58,6 +58,7 @@ export function MeetingTabs({
   meetingId,
   meetingStatus,
   minutes,
+  letterhead,
   review,
   plan,
   chatMessages,
@@ -70,6 +71,7 @@ export function MeetingTabs({
   meetingId: string;
   meetingStatus: string;
   minutes: MinutesState | null;
+  letterhead: Letterhead;
   review: ReviewState | null;
   plan: PlanState;
   chatMessages: ChatMessage[];
@@ -114,7 +116,7 @@ export function MeetingTabs({
 
       <div className="flex flex-1 flex-col p-4">
         {active === "ata" && (
-          <AtaTab meetingId={meetingId} meetingStatus={meetingStatus} minutes={minutes} />
+          <AtaTab meetingId={meetingId} meetingStatus={meetingStatus} minutes={minutes} letterhead={letterhead} />
         )}
 
         {active === "parecer" && (
@@ -244,10 +246,12 @@ function AtaTab({
   meetingId,
   meetingStatus,
   minutes,
+  letterhead,
 }: {
   meetingId: string;
   meetingStatus: string;
   minutes: MinutesState | null;
+  letterhead: Letterhead;
 }) {
   if (meetingStatus === "recording") {
     return (
@@ -287,7 +291,7 @@ function AtaTab({
     );
   }
 
-  return <MinutesView document={minutes.document} />;
+  return <MinutesView document={minutes.document} letterhead={letterhead} />;
 }
 
 function TranscriptTab({ chunks, opinions }: { chunks: Chunk[]; opinions: OpinionRow[] }) {

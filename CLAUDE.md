@@ -92,7 +92,7 @@ Objetivo: um registro **fiel** do que foi dito, gerado sozinho ao encerrar a gra
 - Estados (`meeting_minutes.status`): `pending` → `generating` → `ready` ou `error`. O cartão da reunião mostra isso (Transcrevendo/Gerando ata/Pronta/Erro).
 - Pode regenerar sem regravar (nova linha em `meeting_minutes`, vale a mais recente) e editar manualmente o texto formal (`edited_ata_formal`, sem precisar da IA).
 - Exportação é só do navegador: PDF via impressão (HTML limpo, tema claro sempre), DOCX gerado no navegador (cabeçalho em **tabela**, nunca flexbox; imagem com `width`/`height` como atributo, não CSS — regra aprendida do sistema anterior), copiar texto, compartilhar (Web Share API no celular, `mailto:` como alternativa).
-- Cabeçalho institucional (`company_context.letterhead`, até 5 linhas de texto, sem logo) é editável em Configurações e entra no topo do documento exportado.
+- Cabeçalho institucional (`company_context.letterhead`, até 5 linhas de texto, com logo opcional em `company_context.letterhead_logo`) é editável em Configurações e entra no topo do documento exibido e exportado. Sem Supabase Storage na v1: o logo, pequeno (até 150 KB), é guardado como data URI direto na linha — não é um arquivo em bucket nem em disco.
 
 ## Memória entre reuniões
 
