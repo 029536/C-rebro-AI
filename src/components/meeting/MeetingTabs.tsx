@@ -14,12 +14,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { ChatBox, type ChatMessage } from "@/components/meeting/ChatBox";
 import { GenerateMinutesButton } from "@/components/meeting/GenerateMinutesButton";
 import { GenerateReviewButton } from "@/components/meeting/GenerateReviewButton";
 import { MinutesView } from "@/components/meeting/MinutesView";
+import { PlanView, type PlanState } from "@/components/meeting/PlanView";
 import { OpinionCard, type OpinionKind } from "@/components/OpinionCard";
 import { formatDateTime, formatOffset, formatTime } from "@/lib/format";
 import type { MinutesDocument } from "@/lib/minutes/schema";
+import type { Participant } from "@/lib/participants";
 import type { ReviewContent } from "@/lib/reviews/schema";
 
 type TabKey = "parecer" | "ata" | "plano" | "chat" | "transcricao" | "sessoes";
@@ -56,6 +59,10 @@ export function MeetingTabs({
   meetingStatus,
   minutes,
   review,
+  plan,
+  chatMessages,
+  chatHasContent,
+  meetingSetup,
   opinions,
   chunks,
   previousMeetings,
@@ -64,6 +71,17 @@ export function MeetingTabs({
   meetingStatus: string;
   minutes: MinutesState | null;
   review: ReviewState | null;
+  plan: PlanState;
+  chatMessages: ChatMessage[];
+  chatHasContent: boolean;
+  meetingSetup: {
+    title: string;
+    meeting_type: "client" | "internal";
+    client_name: string;
+    participants: Participant[];
+    context: string;
+    project_id: string | null;
+  };
   opinions: OpinionRow[];
   chunks: Chunk[];
   previousMeetings: PreviousMeeting[];
@@ -103,10 +121,15 @@ export function MeetingTabs({
           <ParecerTab meetingId={meetingId} meetingStatus={meetingStatus} review={review} />
         )}
         {active === "plano" && (
-          <ComingSoon text="O plano de execução com prompts prontos chega numa próxima etapa." />
+          <PlanView meetingId={meetingId} meetingStatus={meetingStatus} plan={plan} />
         )}
         {active === "chat" && (
-          <ComingSoon text="A conversa sobre a reunião chega numa próxima etapa." />
+          <ChatBox
+            meetingId={meetingId}
+            initialMessages={chatMessages}
+            hasContent={chatHasContent}
+            meetingSetup={meetingSetup}
+          />
         )}
 
         {active === "transcricao" && <TranscriptTab chunks={chunks} opinions={opinions} />}
@@ -114,10 +137,6 @@ export function MeetingTabs({
       </div>
     </div>
   );
-}
-
-function ComingSoon({ text }: { text: string }) {
-  return <p className="text-text-secondary">{text}</p>;
 }
 
 function ParecerTab({

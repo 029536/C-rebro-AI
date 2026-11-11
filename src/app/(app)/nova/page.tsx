@@ -18,13 +18,21 @@ export default function NovaReuniaoPage() {
 function NovaReuniaoContent() {
   const searchParams = useSearchParams();
   const resumeMeetingId = searchParams.get("meetingId");
+  // "Continuar em nova sessão" (aba Chat): a reunião já foi criada agora mesmo,
+  // sem trechos ainda — vai direto para a gravação, sem passar por "resume"
+  // (que é para retomar uma reunião PAUSADA, com trechos já existentes).
+  const freshTitle = searchParams.get("freshTitle");
 
-  const [session, setSession] = useState<Session | null>(null);
-  const [resuming, setResuming] = useState(Boolean(resumeMeetingId));
+  const [session, setSession] = useState<Session | null>(
+    resumeMeetingId && freshTitle
+      ? { meetingId: resumeMeetingId, meetingTitle: freshTitle, initialPartNo: 1, initialIdx: 0 }
+      : null
+  );
+  const [resuming, setResuming] = useState(Boolean(resumeMeetingId) && !freshTitle);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!resumeMeetingId) return;
+    if (!resumeMeetingId || freshTitle) return;
     let cancelled = false;
 
     fetch(`/api/meetings/${resumeMeetingId}`, {
@@ -56,7 +64,7 @@ function NovaReuniaoContent() {
     return () => {
       cancelled = true;
     };
-  }, [resumeMeetingId]);
+  }, [resumeMeetingId, freshTitle]);
 
   async function createMeeting(value: MeetingSetupValue, previousMeetingIds: string[]) {
     try {

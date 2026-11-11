@@ -14,6 +14,9 @@ const createMeetingSchema = z.object({
   // ligação de verdade para as que realmente pertencem ao usuário (RLS cuida disso).
   previous_meeting_ids: z.array(z.uuid()).max(20).optional(),
   project_id: z.uuid().optional(),
+  // 'session': "Continuar em nova sessão" (mesma conversa, outro dia) — forma uma
+  // corrente simples. 'context' (padrão): memória geral, só uma ligação solta.
+  link_type: z.enum(["context", "session"]).optional(),
 });
 
 /** Reuniões já encerradas, para o seletor "Partir de reuniões anteriores". */
@@ -83,6 +86,7 @@ export async function POST(request: Request) {
     const links = (owned ?? []).map((meeting) => ({
       meeting_id: data.id,
       previous_meeting_id: meeting.id,
+      link_type: parsed.data.link_type ?? "context",
     }));
     if (links.length > 0) {
       await supabase.from("meeting_links").insert(links);

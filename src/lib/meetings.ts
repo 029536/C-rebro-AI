@@ -116,6 +116,45 @@ export function groupMeetingsBySession(
   return [...groups.values()];
 }
 
+/**
+ * Monta a corrente de sessões (link_type = 'session') a partir de qualquer
+ * ponto dela: anda para trás (sessões mais antigas) e para a frente (sessões
+ * mais novas), devolvendo os ids da mais antiga para a mais nova, incluindo
+ * `startId`. É o que torna o chat "um só por conversa" (CLAUDE.md, "Sessões").
+ */
+export function buildSessionChain(edges: SessionEdge[], startId: string): string[] {
+  const nextByPrevious = new Map<string, string>();
+  const previousByNext = new Map<string, string>();
+  for (const edge of edges) {
+    previousByNext.set(edge.meetingId, edge.previousMeetingId);
+    nextByPrevious.set(edge.previousMeetingId, edge.meetingId);
+  }
+
+  const chain: string[] = [startId];
+
+  let cursor = startId;
+  const seenBackward = new Set([startId]);
+  while (previousByNext.has(cursor)) {
+    const previous = previousByNext.get(cursor)!;
+    if (seenBackward.has(previous)) break;
+    chain.unshift(previous);
+    seenBackward.add(previous);
+    cursor = previous;
+  }
+
+  cursor = startId;
+  const seenForward = new Set([startId]);
+  while (nextByPrevious.has(cursor)) {
+    const next = nextByPrevious.get(cursor)!;
+    if (seenForward.has(next)) break;
+    chain.push(next);
+    seenForward.add(next);
+    cursor = next;
+  }
+
+  return chain;
+}
+
 export type MeetingChip = "ata" | "parecer" | "andamento";
 
 /**

@@ -130,7 +130,7 @@ Objetivo: o Claude enxergar o código e a documentação que já existem, para o
 
 ## Plano de execução e prompts prontos
 
-- Saída estruturada (tool use da Anthropic) validada com `zod`: `summary` e uma lista de tarefas com `title`, `description`, `acceptance`, `effort` (P, M ou G), `depends_on` (posições) e `prompt_md`.
+- Saída estruturada (tool use da Anthropic) validada com `zod`: `summary` e uma lista de tarefas com `title`, `description`, `acceptance`, `priority` (alta, media ou baixa), `depends_on` (posições) e `prompt_md`.
 - Cada `prompt_md` é um prompt **completo e autocontido** para o Claude Code, em português: contexto e decisões da reunião, objetivo, restrições, passos sugeridos, critérios de aceite, arquivos prováveis (somente se houver projeto, e só caminhos que existam no mapa) e a instrução de confirmar o entendimento e listar dúvidas antes de codar.
 - Na interface: lista de tarefas com status (`todo`, `doing`, `done`), uma **nota curta de andamento** por tarefa (por exemplo "entregue em 05/11, falta testar"), botão **Copiar prompt** em cada uma e **Exportar tudo** (um `.md` único ou um `.zip` com `01-titulo.md`, `02-titulo.md`, gerado no navegador).
 - **Andamento no contexto:** quando a reunião atual tem reuniões anteriores ligadas, as tarefas dos planos dessas reuniões entram no contexto do Claude (copiloto, parecer, plano, chat) com título, status e nota de andamento, numa seção `<andamento>`. O Claude usa isso para não sugerir de novo o que já está feito e para perguntar sobre o que ainda está pendente.

@@ -3,12 +3,15 @@ import { notFound } from "next/navigation";
 import { MeetingActions } from "@/components/MeetingActions";
 import { MeetingSetupSection } from "@/components/MeetingSetupSection";
 import { MeetingTabs, type MinutesState, type ReviewState } from "@/components/meeting/MeetingTabs";
+import type { PlanState } from "@/components/meeting/PlanView";
 import { StatusBadge } from "@/components/StatusBadge";
 import { redactSecrets } from "@/lib/ai/env";
+import { fetchChatHistory } from "@/lib/chat/service";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { deriveMeetingChips } from "@/lib/meetings";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
+import { fetchCurrentPlan } from "@/lib/plans/service";
 import { reviewContentSchema } from "@/lib/reviews/schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -77,6 +80,17 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
     .select("id, offset_seconds, text, kind, prompt")
     .eq("meeting_id", meetingId)
     .order("created_at", { ascending: true });
+
+  const [currentPlan, chatHistory] = await Promise.all([
+    fetchCurrentPlan(supabase, meetingId),
+    fetchChatHistory(supabase, meetingId),
+  ]);
+  const plan: PlanState = currentPlan ? { summary: currentPlan.plan.summary, tasks: currentPlan.tasks } : null;
+  const chatHasContent =
+    (minutesRow?.status === "ready" && minutesRow.content !== null) ||
+    (reviewRow?.status === "ready" && reviewRow.content !== null) ||
+    (chunks ?? []).length > 0 ||
+    chatHistory.length > 0;
 
   const minutes: MinutesState | null = minutesRow
     ? {
@@ -170,6 +184,17 @@ export async function MeetingDetailContent({ meetingId }: { meetingId: string })
         meetingStatus={meeting.status}
         minutes={minutes}
         review={review}
+        plan={plan}
+        chatMessages={chatHistory}
+        chatHasContent={chatHasContent}
+        meetingSetup={{
+          title: meeting.title,
+          meeting_type: meeting.meeting_type,
+          client_name: meeting.client_name ?? "",
+          participants: participants.success ? participants.data : [],
+          context: meeting.context ?? "",
+          project_id: meeting.project_id,
+        }}
         opinions={opinionRows ?? []}
         chunks={chunks ?? []}
         previousMeetings={previousMeetings ?? []}
