@@ -11,6 +11,7 @@ import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
 import { type PlanTask, planContentSchema } from "@/lib/plans/schema";
+import { buildProjectContextBlock } from "@/lib/projects/context";
 import { reviewContentSchema } from "@/lib/reviews/schema";
 import type { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
@@ -31,13 +32,15 @@ export function buildTaskRows(
   meetingId: string,
   planId: string,
   doneTasksToKeep: DevTaskRow[],
-  candidateTasks: PlanTask[]
+  candidateTasks: PlanTask[],
+  projectId: string | null = null
 ): DevTaskInsert[] {
   const offset = doneTasksToKeep.length;
   return [
     ...doneTasksToKeep.map((task, index) => ({
       meeting_id: meetingId,
       plan_id: planId,
+      project_id: projectId,
       position: index + 1,
       title: task.title,
       description: task.description,
@@ -51,6 +54,7 @@ export function buildTaskRows(
     ...candidateTasks.map((task, index) => ({
       meeting_id: meetingId,
       plan_id: planId,
+      project_id: projectId,
       position: offset + index + 1,
       title: task.title,
       description: task.description,
@@ -197,6 +201,10 @@ export async function generateMeetingPlan(
       ? doneTasks.map((task) => `- ${task.title}: ${task.description}`).join("\n")
       : null;
 
+  const projectContext = meeting.project_id
+    ? await buildProjectContextBlock(supabase, meeting.project_id, transcript)
+    : null;
+
   try {
     const content = await generatePlanContent({
       companyContext: companyContext?.context ?? "",
@@ -204,6 +212,7 @@ export async function generateMeetingPlan(
       ataFormal,
       reviewSummary,
       doneTasksBlock,
+      projectContext,
       hasProject: Boolean(meeting.project_id),
       transcript,
     });
@@ -214,10 +223,13 @@ export async function generateMeetingPlan(
     }
 
     if (doneTasks.length === 0) {
-      const committed = await commitPlan(supabase, meetingId, {
-        summary: parsed.data.summary,
-        tasks: parsed.data.tasks,
-      });
+      const committed = await commitPlan(
+        supabase,
+        meetingId,
+        { summary: parsed.data.summary, tasks: parsed.data.tasks },
+        [],
+        meeting.project_id
+      );
       return committed;
     }
 
@@ -242,7 +254,8 @@ export async function commitPlan(
   supabase: Supabase,
   meetingId: string,
   candidate: { summary: string; tasks: PlanTask[] },
-  doneTasksToKeep: DevTaskRow[] = []
+  doneTasksToKeep: DevTaskRow[] = [],
+  projectId: string | null = null
 ): Promise<GeneratePlanCommitted | PlanFailure> {
   const { data: plan, error: planError } = await supabase
     .from("dev_plans")
@@ -258,7 +271,7 @@ export async function commitPlan(
     return { ok: false, status: 500, error: "Não foi possível salvar o plano.", errorDetail: null };
   }
 
-  const rows = buildTaskRows(meetingId, plan.id, doneTasksToKeep, candidate.tasks);
+  const rows = buildTaskRows(meetingId, plan.id, doneTasksToKeep, candidate.tasks, projectId);
 
   const { data: insertedTasks, error: tasksError } = await supabase
     .from("dev_tasks")

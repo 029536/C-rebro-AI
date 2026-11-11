@@ -38,6 +38,7 @@ export async function generatePlanContent(params: {
   ataFormal?: string | null;
   reviewSummary?: string | null;
   doneTasksBlock?: string | null;
+  projectContext?: string | null;
   hasProject: boolean;
   transcript: string;
 }): Promise<PlanContent> {
@@ -54,6 +55,7 @@ export async function generatePlanContent(params: {
       ataFormal: params.ataFormal,
       reviewSummary: params.reviewSummary,
       doneTasksBlock: params.doneTasksBlock,
+      projectContext: params.projectContext,
       hasProject: params.hasProject,
     }),
     messages: [{ role: "user", content: `<transcricao>\n${params.transcript}\n</transcricao>` }],

@@ -57,3 +57,6 @@ export const COPILOT_RECENT_WINDOW_SECONDS = 300;
 
 /** Quantas vezes tentar reenviar um trecho sozinho antes de esperar o toque em "Reenviar agora". */
 export const CHUNK_MAX_AUTO_RETRIES = 3;
+
+/** Tamanho máximo (em caracteres) dos arquivos/documentos de projeto selecionados como relevantes, somados, por chamada ao Claude. */
+export const PROJECT_CONTEXT_MAX_CHARS = 20_000;

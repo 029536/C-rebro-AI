@@ -5,6 +5,7 @@ import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { buildSessionChain } from "@/lib/meetings";
 import { participantsSchema } from "@/lib/participants";
 import { fetchCurrentPlan } from "@/lib/plans/service";
+import { buildProjectContextBlock } from "@/lib/projects/context";
 import { reviewContentSchema } from "@/lib/reviews/schema";
 import type { createClient } from "@/lib/supabase/server";
 
@@ -60,7 +61,12 @@ export async function appendChatMessage(
 export async function buildChatContext(
   supabase: Supabase,
   meetingId: string
-): Promise<{ system: string; messages: Anthropic.MessageParam[]; hasContent: boolean } | null> {
+): Promise<{
+  system: string;
+  messages: Anthropic.MessageParam[];
+  hasContent: boolean;
+  projectContext: string | null;
+} | null> {
   const chainIds = await getSessionChainMeetingIds(supabase, meetingId);
 
   const [
@@ -72,7 +78,7 @@ export async function buildChatContext(
   ] = await Promise.all([
     supabase
       .from("meetings")
-      .select("id, title, started_at, meeting_type, client_name, participants, context, status")
+      .select("id, title, started_at, meeting_type, client_name, participants, context, status, project_id")
       .in("id", chainIds),
     supabase
       .from("meeting_minutes")
@@ -198,5 +204,11 @@ export async function buildChatContext(
     content: row.content,
   }));
 
-  return { system, messages, hasContent };
+  const currentMeeting = orderedMeetings.find((meeting) => meeting.id === meetingId);
+  const lastUserMessage = [...(chatRows ?? [])].reverse().find((row) => row.role === "user");
+  const projectContext = currentMeeting?.project_id
+    ? await buildProjectContextBlock(supabase, currentMeeting.project_id, lastUserMessage?.content ?? "")
+    : null;
+
+  return { system, messages, hasContent, projectContext };
 }

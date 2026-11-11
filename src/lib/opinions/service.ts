@@ -5,6 +5,7 @@ import { buildMeetingContextBlock } from "@/lib/ai/prompts";
 import type { CopilotKind } from "@/lib/ai/prompts";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { participantsSchema } from "@/lib/participants";
+import { buildProjectContextBlock } from "@/lib/projects/context";
 import type { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 
@@ -35,7 +36,7 @@ export async function generateMeetingOpinion(
 
   const { data: meeting } = await supabase
     .from("meetings")
-    .select("id, meeting_type, client_name, participants, context")
+    .select("id, meeting_type, client_name, participants, context, project_id")
     .eq("id", meetingId)
     .maybeSingle();
 
@@ -104,6 +105,10 @@ export async function generateMeetingOpinion(
     allChunks.map((chunk) => ({ transcript: chunk.transcript, audioSeconds: chunk.audio_seconds ?? 0 }))
   );
 
+  const projectContext = meeting.project_id
+    ? await buildProjectContextBlock(supabase, meeting.project_id, recentTranscript)
+    : null;
+
   try {
     const text = await generateOpinion({
       kind: params.kind,
@@ -113,6 +118,7 @@ export async function generateMeetingOpinion(
       previousOpinion: previousOpinionRow?.text ?? null,
       question: params.question,
       recentTranscript,
+      projectContext,
     });
 
     if (!text) {

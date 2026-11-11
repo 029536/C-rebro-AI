@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Database } from "@/lib/database.types";
 import { generateMeetingMinutes } from "@/lib/minutes/service";
 import { participantsSchema } from "@/lib/participants";
+import { updateProjectMemoryAfterMeeting } from "@/lib/projects/memory";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 120;
@@ -132,6 +133,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // "Encerrar": se a geração der erro, fica registrado em `meeting_minutes`
   // (status "error") e a pessoa usa "Tentar de novo" na aba Ata.
   await generateMeetingMinutes(supabase, id);
+  await updateProjectMemoryAfterMeeting(supabase, id);
 
   return NextResponse.json({ ok: true, duration_seconds: durationSeconds });
 }

@@ -205,7 +205,8 @@ Todas as tabelas com Row Level Security. Cada linha pertence a um usuário; filh
 | `project_files` | Arquivos de código do projeto, com hash e resumo |
 | `project_documents` | Documentos de apoio do projeto (texto extraído de `.pdf`, `.docx` etc.), com hash e resumo |
 | `dev_plans` | Plano de execução gerado a partir de uma reunião |
-| `dev_tasks` | Tarefas do plano (ou rascunhos), com status, nota curta de andamento e o prompt para o Claude Code |
+| `dev_tasks` | Tarefas do plano (ou rascunhos), com status, nota curta de andamento e o prompt para o Claude Code; `project_id` (opcional) para a tela do projeto listar o andamento de todas as reuniões |
+| `project_memory` | Resumo vivo do projeto (uma linha por projeto, sempre sobrescrita): decisões, estado real e pendências, atualizado ao encerrar reuniões ligadas a ele e ao gerar parecer/plano |
 | `company_context` | Contexto da empresa, vocabulário e cabeçalho da ata (texto, até 5 linhas), editáveis em Configurações |
 
 Regras: toda mudança de esquema vira uma migração em `supabase/migrations/`; excluir uma reunião ou projeto apaga tudo em cascata; as rotas usam o cliente Supabase da sessão do usuário (RLS ativo). A chave `service_role` não é usada no caminho de usuário e nunca vai para o navegador.

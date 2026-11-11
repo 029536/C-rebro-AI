@@ -45,7 +45,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const { stream, done } = streamChatReply({ system: context.system, messages: context.messages });
+    const { stream, done } = streamChatReply({
+      system: context.system,
+      messages: context.messages,
+      projectContext: context.projectContext,
+    });
 
     done
       .then((text) => appendChatMessage(supabase, meetingId, "assistant", text))

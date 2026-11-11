@@ -32,6 +32,7 @@ export async function generateOpinion(params: {
   previousOpinion?: string | null;
   question?: string | null;
   recentTranscript: string;
+  projectContext?: string | null;
 }): Promise<string | null> {
   if (process.env.MOCK_AI === "1") {
     return MOCK_BY_KIND[params.kind];
@@ -59,6 +60,7 @@ export async function generateOpinion(params: {
           previousOpinion: params.previousOpinion,
           question: params.question,
           recentTranscript: params.recentTranscript,
+          projectContext: params.projectContext,
         }),
       },
     ],

@@ -19,6 +19,7 @@ export async function generateReviewContent(params: {
   companyContext: string;
   meetingContext?: string;
   ataFormal?: string | null;
+  projectContext?: string | null;
   transcript: string;
 }): Promise<ReviewContent> {
   if (process.env.MOCK_AI === "1") {
@@ -32,6 +33,7 @@ export async function generateReviewContent(params: {
       companyContext: params.companyContext,
       meetingContext: params.meetingContext,
       ataFormal: params.ataFormal,
+      projectContext: params.projectContext,
     }),
     messages: [{ role: "user", content: `<transcricao>\n${params.transcript}\n</transcricao>` }],
     toolName: REVIEW_TOOL_NAME,

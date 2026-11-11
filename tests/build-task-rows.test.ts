@@ -30,6 +30,7 @@ function baseDoneTask() {
     id: "done-1",
     meeting_id: "m1",
     plan_id: "plan-old",
+    project_id: null as string | null,
     position: 1,
     title: "Tarefa já feita",
     description: "já pronta",

@@ -458,6 +458,7 @@ export type Database = {
           id: string;
           meeting_id: string;
           plan_id: string;
+          project_id: string | null;
           position: number;
           title: string;
           description: string;
@@ -474,6 +475,7 @@ export type Database = {
           id?: string;
           meeting_id: string;
           plan_id: string;
+          project_id?: string | null;
           position?: number;
           title: string;
           description?: string;
@@ -500,6 +502,28 @@ export type Database = {
             columns: ["plan_id"];
             isOneToOne: false;
             referencedRelation: "dev_plans";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      project_memory: {
+        Row: {
+          project_id: string;
+          summary: string;
+          updated_at: string;
+        };
+        Insert: {
+          project_id: string;
+          summary?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["project_memory"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "project_memory_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: true;
+            referencedRelation: "projects";
             referencedColumns: ["id"];
           },
         ];

@@ -22,6 +22,8 @@ export type ChatStreamResult = {
 export function streamChatReply(params: {
   system: string;
   messages: Anthropic.MessageParam[];
+  /** Bloco do projeto (arquivos relevantes variam por mensagem) — fica FORA do bloco com cache_control. */
+  projectContext?: string | null;
 }): ChatStreamResult {
   const encoder = new TextEncoder();
 
@@ -47,7 +49,12 @@ export function streamChatReply(params: {
   const anthropicStream = client.messages.stream({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
     max_tokens: MAX_TOKENS,
-    system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
+    system: [
+      { type: "text", text: params.system, cache_control: { type: "ephemeral" } },
+      ...(params.projectContext
+        ? [{ type: "text" as const, text: `<projeto>\n${params.projectContext}\n</projeto>` }]
+        : []),
+    ],
     messages: params.messages,
   });
 

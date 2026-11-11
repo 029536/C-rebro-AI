@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateMeetingReview } from "@/lib/reviews/service";
+import { updateProjectMemoryAfterMeeting } from "@/lib/projects/memory";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 120;
@@ -16,5 +17,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       { status: result.status }
     );
   }
+  await updateProjectMemoryAfterMeeting(supabase, meetingId);
   return NextResponse.json(result.review);
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { planTaskSchema } from "@/lib/plans/schema";
 import { commitPlan, fetchLatestDoneTasks, generateMeetingPlan } from "@/lib/plans/service";
+import { updateProjectMemoryAfterMeeting } from "@/lib/projects/memory";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 120;
@@ -28,22 +29,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const confirmParsed = rawBody ? confirmSchema.safeParse(rawBody) : null;
 
   if (confirmParsed?.success) {
-    const doneTasks = await fetchLatestDoneTasks(supabase, meetingId);
+    const [doneTasks, { data: meeting }] = await Promise.all([
+      fetchLatestDoneTasks(supabase, meetingId),
+      supabase.from("meetings").select("project_id").eq("id", meetingId).maybeSingle(),
+    ]);
     const result = await commitPlan(
       supabase,
       meetingId,
       { summary: confirmParsed.data.summary, tasks: confirmParsed.data.tasks },
-      doneTasks
+      doneTasks,
+      meeting?.project_id ?? null
     );
     if (!result.ok) {
       return NextResponse.json({ error: result.error, error_detail: result.errorDetail }, { status: result.status });
     }
+    await updateProjectMemoryAfterMeeting(supabase, meetingId);
     return NextResponse.json(result);
   }
 
   const result = await generateMeetingPlan(supabase, meetingId);
   if (!result.ok) {
     return NextResponse.json({ error: result.error, error_detail: result.errorDetail }, { status: result.status });
+  }
+  if (!result.preview) {
+    await updateProjectMemoryAfterMeeting(supabase, meetingId);
   }
   return NextResponse.json(result);
 }

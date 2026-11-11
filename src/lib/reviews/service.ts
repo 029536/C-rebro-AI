@@ -10,6 +10,7 @@ import { generateReviewContent } from "@/lib/ai/review";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
+import { buildProjectContextBlock } from "@/lib/projects/context";
 import { reviewContentSchema } from "@/lib/reviews/schema";
 import type { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
@@ -33,7 +34,7 @@ export async function generateMeetingReview(
 ): Promise<GenerateReviewResult> {
   const { data: meeting } = await supabase
     .from("meetings")
-    .select("id, status, meeting_type, client_name, participants, context, started_at")
+    .select("id, status, meeting_type, client_name, participants, context, started_at, project_id")
     .eq("id", meetingId)
     .maybeSingle();
 
@@ -148,12 +149,16 @@ export async function generateMeetingReview(
   const ataFormal = ataParsed?.success ? ataParsed.data.ata_formal : null;
 
   const model = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
+  const projectContext = meeting.project_id
+    ? await buildProjectContextBlock(supabase, meeting.project_id, transcript)
+    : null;
 
   try {
     const content = await generateReviewContent({
       companyContext: companyContext?.context ?? "",
       meetingContext: meetingContext || undefined,
       ataFormal,
+      projectContext,
       transcript,
     });
 
