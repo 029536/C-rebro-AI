@@ -17,6 +17,19 @@ export const planTaskSchema = z.object({
 
 export type PlanTask = z.infer<typeof planTaskSchema>;
 
+/**
+ * Tarefa só com os campos da etapa 1 do plano (CLAUDE.md, "duas etapas") —
+ * sem `prompt_md`, que vem de uma chamada separada por tarefa (etapa 2).
+ */
+export const planTaskStubSchema = planTaskSchema.omit({ prompt_md: true });
+export type PlanTaskStub = z.infer<typeof planTaskStubSchema>;
+
+export const planTaskListSchema = z.object({
+  summary: z.string().trim().min(1).max(2_000),
+  tasks: z.array(planTaskStubSchema).min(1).max(20),
+});
+export type PlanTaskList = z.infer<typeof planTaskListSchema>;
+
 export const planContentSchema = z.object({
   summary: z.string().trim().min(1).max(2_000),
   tasks: z.array(planTaskSchema).min(1).max(20),

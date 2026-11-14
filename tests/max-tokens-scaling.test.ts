@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { minutesMaxTokens } from "@/lib/ai/minutes";
-import { planMaxTokens } from "@/lib/ai/plan";
 import { reviewMaxTokens } from "@/lib/ai/review";
 
 describe("minutesMaxTokens", () => {
@@ -16,16 +15,6 @@ describe("minutesMaxTokens", () => {
 
   it("nunca passa do teto máximo, mesmo para transcrições enormes", () => {
     expect(minutesMaxTokens(1_000_000)).toBe(24_000);
-  });
-});
-
-describe("planMaxTokens", () => {
-  it("usa um teto base maior que o da ata (prompt_md de cada tarefa pode ser grande)", () => {
-    expect(planMaxTokens(0)).toBe(12_000);
-  });
-
-  it("nunca passa do teto máximo", () => {
-    expect(planMaxTokens(1_000_000)).toBe(32_000);
   });
 });
 

@@ -1,6 +1,6 @@
 // Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009, 0010, 0011,
-// 0012, 0013, 0014, 0015, 0016, 0017, 0018, 0019 e 0020 (sem acesso a Docker/Supabase CLI
-// local neste ambiente). Depois que o projeto Supabase existir e as migrações forem
+// 0012, 0013, 0014, 0015, 0016, 0017, 0018, 0019, 0020 e 0021 (sem acesso a Docker/Supabase
+// CLI local neste ambiente). Depois que o projeto Supabase existir e as migrações forem
 // aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
@@ -235,6 +235,49 @@ export type Database = {
             columns: ["meeting_id"];
             isOneToOne: false;
             referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      meeting_minutes_parts: {
+        Row: {
+          id: string;
+          meeting_id: string;
+          minutes_id: string;
+          part_index: number;
+          status: "pending" | "generating" | "ready" | "error";
+          content: Json | null;
+          quick_summary: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          meeting_id: string;
+          minutes_id: string;
+          part_index: number;
+          status?: "pending" | "generating" | "ready" | "error";
+          content?: Json | null;
+          quick_summary?: string | null;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meeting_minutes_parts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "meeting_minutes_parts_meeting_id_fkey";
+            columns: ["meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "meeting_minutes_parts_minutes_id_fkey";
+            columns: ["minutes_id"];
+            isOneToOne: false;
+            referencedRelation: "meeting_minutes";
             referencedColumns: ["id"];
           },
         ];

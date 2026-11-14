@@ -1,0 +1,123 @@
+import {
+  minutesFinalFieldsSchema,
+  minutesPartContentSchema,
+  type MinutesFinalFields,
+  type MinutesPartContent,
+} from "@/lib/minutes/schema";
+import { extractText, getAnthropicClient } from "./anthropic";
+import { ExpectedAIError, summarizeZodIssues } from "./env";
+import {
+  MINUTES_FINAL_FIELDS_INPUT_SCHEMA,
+  MINUTES_FINAL_FIELDS_TOOL_NAME,
+  MINUTES_PART_INPUT_SCHEMA,
+  MINUTES_PART_TOOL_NAME,
+  minutesFinalFieldsSystemPrompt,
+  minutesPartQuickSummarySystemPrompt,
+  minutesPartSystemPrompt,
+} from "./prompts";
+import { callStructuredTool } from "./structuredTool";
+
+/** O Claude respondeu, mas não no formato esperado — não é falta de chave nem erro de rede. */
+export class MinutesPartGenerationError extends ExpectedAIError {}
+
+const PART_MAX_TOKENS = 6_000;
+const QUICK_SUMMARY_MAX_TOKENS = 400;
+const FINAL_FIELDS_MAX_TOKENS = 2_000;
+
+const MOCK_PART_CONTENT: MinutesPartContent = {
+  assuntos_discutidos: ["Assunto simulado desta parte (MOCK_AI=1)."],
+  decisoes: ["Decisão simulada desta parte."],
+  responsabilidades: [{ parte: "Equipe", itens: ["Item de responsabilidade simulado."] }],
+  acoes_futuras: [{ acao: "Ação futura simulada desta parte.", responsavel: null, prazo: null }],
+  ata_formal_trecho: "Trecho de ata simulado desta parte (MOCK_AI=1).",
+};
+
+const MOCK_QUICK_SUMMARY = "Resumo rápido simulado desta parte (MOCK_AI=1).";
+
+const MOCK_FINAL_FIELDS: MinutesFinalFields = {
+  titulo: "Reunião longa (ata simulada em partes — MOCK_AI=1)",
+  resumo_executivo: "Resumo executivo simulado, a partir dos resumos das partes (MOCK_AI=1).",
+  observacoes: null,
+  proximos_encontros: [],
+};
+
+/** Resumo rápido (texto livre, CLAUDE_FAST_MODEL) de uma parte — vira contexto das partes seguintes. */
+export async function generatePartQuickSummary(transcriptChunk: string): Promise<string> {
+  if (process.env.MOCK_AI === "1") {
+    return MOCK_QUICK_SUMMARY;
+  }
+
+  const message = await getAnthropicClient().messages.create({
+    model: process.env.CLAUDE_FAST_MODEL || "claude-haiku-5-5",
+    max_tokens: QUICK_SUMMARY_MAX_TOKENS,
+    system: minutesPartQuickSummarySystemPrompt(),
+    messages: [{ role: "user", content: `<transcricao>\n${transcriptChunk}\n</transcricao>` }],
+  });
+
+  return extractText(message.content).trim();
+}
+
+/** Conteúdo estruturado de UMA parte (CLAUDE_MODEL — registro fiel, não é resumo barato). */
+export async function generateMinutesPartContent(params: {
+  companyContext: string;
+  meetingContext?: string;
+  partNumber: number;
+  totalParts: number;
+  previousPartsSummaryBlock?: string | null;
+  transcriptChunk: string;
+}): Promise<MinutesPartContent> {
+  if (process.env.MOCK_AI === "1") {
+    return MOCK_PART_CONTENT;
+  }
+
+  const input = await callStructuredTool({
+    model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
+    maxTokens: PART_MAX_TOKENS,
+    system: minutesPartSystemPrompt(params),
+    messages: [{ role: "user", content: `<transcricao>\n${params.transcriptChunk}\n</transcricao>` }],
+    toolName: MINUTES_PART_TOOL_NAME,
+    toolDescription: "Salva o conteúdo estruturado de uma parte da ata.",
+    inputSchema: MINUTES_PART_INPUT_SCHEMA,
+  });
+
+  const parsed = minutesPartContentSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new MinutesPartGenerationError(
+      `A parte ${params.partNumber} de ${params.totalParts} da ata não veio num formato válido.`,
+      summarizeZodIssues(parsed.error)
+    );
+  }
+  return parsed.data;
+}
+
+/** Título, resumo executivo, observações e próximos encontros — só a partir dos resumos das partes. */
+export async function generateMinutesFinalFields(params: {
+  companyContext: string;
+  meetingContext?: string;
+  partSummariesBlock: string;
+}): Promise<MinutesFinalFields> {
+  if (process.env.MOCK_AI === "1") {
+    return MOCK_FINAL_FIELDS;
+  }
+
+  const input = await callStructuredTool({
+    model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
+    maxTokens: FINAL_FIELDS_MAX_TOKENS,
+    system: minutesFinalFieldsSystemPrompt(params),
+    messages: [
+      { role: "user", content: `<resumos_das_partes>\n${params.partSummariesBlock}\n</resumos_das_partes>` },
+    ],
+    toolName: MINUTES_FINAL_FIELDS_TOOL_NAME,
+    toolDescription: "Salva os campos finais da ata.",
+    inputSchema: MINUTES_FINAL_FIELDS_INPUT_SCHEMA,
+  });
+
+  const parsed = minutesFinalFieldsSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new MinutesPartGenerationError(
+      "Os campos finais da ata não vieram num formato válido.",
+      summarizeZodIssues(parsed.error)
+    );
+  }
+  return parsed.data;
+}

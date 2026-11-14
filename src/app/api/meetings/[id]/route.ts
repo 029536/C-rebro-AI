@@ -6,7 +6,9 @@ import { participantsSchema } from "@/lib/participants";
 import { updateProjectMemoryAfterMeeting } from "@/lib/projects/memory";
 import { createClient } from "@/lib/supabase/server";
 
-export const maxDuration = 120;
+// "finish" dispara a ata sozinha, que pode sair em várias partes numa reunião
+// longa (map-reduce) — folga maior, ainda dentro do teto do plano Hobby (300s).
+export const maxDuration = 280;
 
 type MeetingUpdate = Database["public"]["Tables"]["meetings"]["Update"];
 

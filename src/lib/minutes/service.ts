@@ -5,9 +5,9 @@ import {
 } from "@/lib/ai/anthropic";
 import { buildContext } from "@/lib/ai/context";
 import { redactSecrets } from "@/lib/ai/env";
-import { generateMinutesContent } from "@/lib/ai/minutes";
 import { buildMeetingContextBlock, combineCompanyContext } from "@/lib/ai/prompts";
 import { formatISODate, formatTime } from "@/lib/format";
+import { generateMinutesContentAuto } from "@/lib/minutes/multipart";
 import { isTranscriptTooSparse } from "@/lib/minutes/rules";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
@@ -146,7 +146,7 @@ export async function generateMeetingMinutes(
   const model = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
 
   try {
-    const content = await generateMinutesContent({
+    const content = await generateMinutesContentAuto(supabase, pendingRow.id, meetingId, {
       companyContext: combineCompanyContext(companyContext),
       meetingType: meeting.meeting_type,
       clientName: meeting.meeting_type === "internal" ? null : meeting.client_name,

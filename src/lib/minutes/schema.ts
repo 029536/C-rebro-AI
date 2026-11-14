@@ -62,3 +62,57 @@ export const minutesContentSchema = minutesDocumentSchema.omit({
 });
 
 export type MinutesContent = z.infer<typeof minutesContentSchema>;
+
+/**
+ * Conteúdo de UMA PARTE da ata (reunião longa, gerada em map-reduce — ver
+ * lib/minutes/multipart.ts). Sem título/resumo executivo/observações/
+ * próximos encontros: isso só faz sentido olhando a reunião inteira, não um
+ * pedaço — fica para a chamada final (`minutesFinalFieldsSchema`).
+ */
+export const minutesPartContentSchema = z.object({
+  assuntos_discutidos: z.array(z.string().trim().min(1).max(500)).max(50),
+  decisoes: z.array(z.string().trim().min(1).max(500)).max(50),
+  responsabilidades: z
+    .array(
+      z.object({
+        parte: z.string().trim().min(1).max(100),
+        itens: z.array(z.string().trim().min(1).max(300)).max(30),
+      })
+    )
+    .max(20),
+  acoes_futuras: z
+    .array(
+      z.object({
+        acao: z.string().trim().min(1).max(300),
+        responsavel: z.string().trim().max(100).nullable().optional(),
+        prazo: z.string().trim().max(100).nullable().optional(),
+      })
+    )
+    .max(50),
+  // Texto corrido só do que foi dito NESTA parte, sem cabeçalho nem fechamento
+  // (isso é montado depois, juntando todas as partes — ver buildAtaFormal).
+  ata_formal_trecho: z.string().trim().min(1),
+});
+
+export type MinutesPartContent = z.infer<typeof minutesPartContentSchema>;
+
+/**
+ * Campos que só fazem sentido vendo a reunião inteira, gerados na chamada
+ * final a partir só dos resumos curtos de cada parte (nunca a transcrição
+ * inteira de novo — controla custo).
+ */
+export const minutesFinalFieldsSchema = z.object({
+  titulo: z.string().trim().min(1).max(200),
+  resumo_executivo: z.string().trim().min(1).max(2_000),
+  observacoes: z.string().trim().max(4_000).nullable(),
+  proximos_encontros: z
+    .array(
+      z.object({
+        data: z.string().trim().max(50).nullable().optional(),
+        objetivo: z.string().trim().min(1).max(500),
+      })
+    )
+    .max(10),
+});
+
+export type MinutesFinalFields = z.infer<typeof minutesFinalFieldsSchema>;

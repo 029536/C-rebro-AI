@@ -57,3 +57,16 @@ export const CHUNK_MAX_AUTO_RETRIES = 3;
 
 /** Tamanho máximo (em caracteres) dos arquivos/documentos de projeto selecionados como relevantes, somados, por chamada ao Claude. */
 export const PROJECT_CONTEXT_MAX_CHARS = 20_000;
+
+/**
+ * Tamanho alvo (em caracteres) de cada parte, ao dividir a transcrição para
+ * gerar a ata em map-reduce (reunião longa) — CLAUDE.md. Abaixo disso, a
+ * ata sai numa chamada só.
+ */
+export const MINUTES_CHUNK_TARGET_CHARS = 27_500;
+
+/** Quantas partes da ata são geradas em paralelo ao mesmo tempo (map-reduce). */
+export const MINUTES_PART_CONCURRENCY_LIMIT = 3;
+
+/** Quantos prompts de tarefa do plano são gerados em paralelo ao mesmo tempo (etapa 2). */
+export const PLAN_TASK_PROMPT_CONCURRENCY_LIMIT = 4;
