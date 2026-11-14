@@ -206,6 +206,58 @@ describe("generateMinutesContentAuto", () => {
     expect(failedRow?.error).toContain("assuntos_discutidos.0");
   });
 
+  it("se o resumo de uma parte falhar, o conteúdo das partes ainda é gerado e salvo, mas a chamada final não roda", async () => {
+    generatePartQuickSummary.mockImplementation(async () => {
+      throw new Error("resumo sempre falha neste teste");
+    });
+    generateMinutesPartContent.mockImplementation(async (params: { partNumber: number }) =>
+      partContent(`parte ${params.partNumber}`)
+    );
+
+    const { supabase, getRows } = makeSupabaseStub();
+    await expect(
+      generateMinutesContentAuto(supabase as never, "minutes-1", "meeting-1", BASE_PARAMS)
+    ).rejects.toThrow(MultipartMinutesError);
+
+    expect(generateMinutesFinalFields).not.toHaveBeenCalled();
+    // o CONTEÚDO de cada parte foi gerado e salvo normalmente, só o resumo que faltou.
+    const rows = getRows();
+    expect(rows.every((row) => row.status === "ready")).toBe(true);
+    expect(rows.every((row) => !row.quick_summary)).toBe(true);
+  });
+
+  it("'Tentar de novo' depois de uma falha só no resumo reaproveita todo o conteúdo pronto e refaz só o resumo que faltou", async () => {
+    let summaryAttempts = 0;
+    generatePartQuickSummary.mockImplementation(async () => {
+      summaryAttempts++;
+      // falha sempre na 1ª rodada inteira (3 partes), dá certo a partir da 2ª rodada (retry).
+      if (summaryAttempts <= 3) throw new Error("resumo falhou na primeira tentativa");
+      return "resumo ok";
+    });
+    generateMinutesPartContent.mockImplementation(async (params: { partNumber: number }) =>
+      partContent(`parte ${params.partNumber}`)
+    );
+    generateMinutesFinalFields.mockResolvedValue({
+      titulo: "T",
+      resumo_executivo: "R",
+      observacoes: null,
+      proximos_encontros: [],
+    });
+
+    const { supabase } = makeSupabaseStub();
+    await expect(
+      generateMinutesContentAuto(supabase as never, "minutes-1", "meeting-1", BASE_PARAMS)
+    ).rejects.toThrow(MultipartMinutesError);
+
+    const contentCallsAfterFirstAttempt = generateMinutesPartContent.mock.calls.length;
+
+    await generateMinutesContentAuto(supabase as never, "minutes-2", "meeting-1", BASE_PARAMS);
+
+    // nenhuma parte precisou gerar o CONTEÚDO de novo: já estava tudo pronto.
+    expect(generateMinutesPartContent.mock.calls.length).toBe(contentCallsAfterFirstAttempt);
+    expect(generateMinutesFinalFields).toHaveBeenCalledTimes(1);
+  });
+
   it("'Tentar de novo' (novo minutes_id) herda as partes prontas e só refaz a que falhou", async () => {
     generatePartQuickSummary.mockResolvedValue("resumo");
     let secondPartAttempts = 0;

@@ -57,14 +57,25 @@ export async function generateMinutesContentAuto(
   await ensurePartsExist(supabase, meetingId, minutesId, chunks.length);
   let partRows = await fetchParts(supabase, minutesId);
 
-  // Resumos rápidos (CLAUDE_FAST_MODEL): só para quem ainda não tem — dá contexto
-  // às partes seguintes sem reenviar a transcrição inteira de novo.
+  // Resumos rápidos (CLAUDE_FAST_MODEL, com fallback — ver generatePartQuickSummary):
+  // só para quem ainda não tem. Nunca salva um resumo vazio; se a geração falhar
+  // mesmo depois das tentativas internas, a parte fica sem resumo (null, não "") e
+  // a checagem antes da chamada final, mais abaixo, recusa prosseguir enquanto
+  // faltar algum — "Tentar de novo" então refaz só os resumos que faltaram, sem
+  // perder o conteúdo das partes já prontas.
   await Promise.all(
     partRows.map(async (row) => {
       if (row.quick_summary) return;
-      const summary = await generatePartQuickSummary(chunks[row.part_index]);
-      await supabase.from("meeting_minutes_parts").update({ quick_summary: summary }).eq("id", row.id);
-      row.quick_summary = summary;
+      try {
+        const summary = await generatePartQuickSummary(chunks[row.part_index]);
+        await supabase.from("meeting_minutes_parts").update({ quick_summary: summary }).eq("id", row.id);
+        row.quick_summary = summary;
+      } catch (error) {
+        console.error(
+          `generatePartQuickSummary (parte ${row.part_index + 1}) falhou:`,
+          redactSecrets(error instanceof Error ? error.message : String(error))
+        );
+      }
     })
   );
 
@@ -118,7 +129,18 @@ export async function generateMinutesContentAuto(
   const orderedContents = ordered.map((row) => minutesPartContentSchema.parse(row.content));
   const merged = mergeMinutesParts(orderedContents);
 
-  const summariesBlock = ordered.map((row) => `Parte ${row.part_index + 1}: ${row.quick_summary ?? ""}`).join("\n\n");
+  // A chamada final (título, resumo executivo, observações, próximos encontros)
+  // só vê os resumos — nunca a transcrição de novo — então não pode rodar com
+  // algum deles faltando: viraria um "Parte 2: " vazio no meio do contexto.
+  const missingSummaries = ordered.filter((row) => !row.quick_summary);
+  if (missingSummaries.length > 0) {
+    throw new MultipartMinutesError(
+      'O resumo de uma ou mais partes da ata não pôde ser gerado — sem eles, os campos finais (título, resumo executivo) sairiam incompletos. O conteúdo das partes já geradas fica salvo; "Tentar de novo" refaz só os resumos que faltaram.',
+      missingSummaries.map((row) => `parte ${row.part_index + 1}: resumo rápido ausente`).join(" · ")
+    );
+  }
+
+  const summariesBlock = ordered.map((row) => `Parte ${row.part_index + 1}: ${row.quick_summary}`).join("\n\n");
 
   const finalFields = await generateMinutesFinalFields({
     companyContext: params.companyContext,

@@ -42,20 +42,63 @@ const MOCK_FINAL_FIELDS: MinutesFinalFields = {
   proximos_encontros: [],
 };
 
-/** Resumo rápido (texto livre, CLAUDE_FAST_MODEL) de uma parte — vira contexto das partes seguintes. */
+type QuickSummaryAttempt = { text: string; stopReason: string | null; blockTypes: string[] };
+
+async function tryGenerateQuickSummary(
+  model: string,
+  maxTokens: number,
+  transcriptChunk: string
+): Promise<QuickSummaryAttempt> {
+  const message = await getAnthropicClient().messages.create({
+    model,
+    max_tokens: maxTokens,
+    system: minutesPartQuickSummarySystemPrompt(),
+    messages: [{ role: "user", content: `<transcricao>\n${transcriptChunk}\n</transcricao>` }],
+  });
+  return {
+    text: extractText(message.content).trim(),
+    stopReason: message.stop_reason,
+    blockTypes: message.content.map((block) => block.type),
+  };
+}
+
+/**
+ * Resumo rápido (texto livre) de uma parte — vira contexto das partes
+ * seguintes. NUNCA devolve vazio: se a primeira tentativa (CLAUDE_FAST_MODEL)
+ * vier em branco, tenta de novo com mais espaço; persistindo, troca para o
+ * CLAUDE_MODEL normal. Se mesmo assim vier vazio, lança — quem chama
+ * (lib/minutes/multipart.ts) nunca salva um resumo vazio, deixa `null` e
+ * tenta de novo depois. Loga só stop_reason e os tipos de bloco recebidos,
+ * nunca texto da reunião (CLAUDE.md).
+ */
 export async function generatePartQuickSummary(transcriptChunk: string): Promise<string> {
   if (process.env.MOCK_AI === "1") {
     return MOCK_QUICK_SUMMARY;
   }
 
-  const message = await getAnthropicClient().messages.create({
-    model: process.env.CLAUDE_FAST_MODEL || "claude-haiku-5-5",
-    max_tokens: QUICK_SUMMARY_MAX_TOKENS,
-    system: minutesPartQuickSummarySystemPrompt(),
-    messages: [{ role: "user", content: `<transcricao>\n${transcriptChunk}\n</transcricao>` }],
-  });
+  const fastModel = process.env.CLAUDE_FAST_MODEL || "claude-haiku-5-5";
+  const mainModel = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
+  const attempts = [
+    { model: fastModel, maxTokens: QUICK_SUMMARY_MAX_TOKENS },
+    { model: fastModel, maxTokens: QUICK_SUMMARY_MAX_TOKENS * 2 },
+    { model: mainModel, maxTokens: QUICK_SUMMARY_MAX_TOKENS * 2 },
+  ];
 
-  return extractText(message.content).trim();
+  let last: QuickSummaryAttempt | null = null;
+  for (const { model, maxTokens } of attempts) {
+    last = await tryGenerateQuickSummary(model, maxTokens, transcriptChunk);
+    if (last.text) return last.text;
+    console.warn(
+      `generatePartQuickSummary: resumo vazio (modelo=${model}, max_tokens=${maxTokens}, stop_reason=${
+        last.stopReason ?? "desconhecido"
+      }, blocos=${last.blockTypes.join(",") || "nenhum"}).`
+    );
+  }
+
+  throw new MinutesPartGenerationError(
+    "O resumo rápido de uma parte da ata veio vazio, mesmo depois de tentar de novo e trocar de modelo.",
+    `stop_reason=${last?.stopReason ?? "desconhecido"} · blocos=${last?.blockTypes.join(",") || "nenhum"}`
+  );
 }
 
 /** Conteúdo estruturado de UMA parte (CLAUDE_MODEL — registro fiel, não é resumo barato). */
