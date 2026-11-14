@@ -11,79 +11,66 @@ vi.mock("@anthropic-ai/sdk", async (importOriginal) => {
   return { ...actual, default: MockAnthropic };
 });
 
-const { generatePlanContent } = await import("@/lib/ai/plan");
-
-const BASE_PARAMS = {
-  companyContext: "",
-  hasProject: false,
-  transcript: "algo foi dito sobre o projeto",
-};
-
-const TASK_LIST = {
-  summary: "Resumo do plano.",
-  tasks: [
-    { title: "Tarefa 1", description: "desc 1", acceptance: "aceite 1", priority: "alta", depends_on: [] },
-    { title: "Tarefa 2", description: "desc 2", acceptance: "aceite 2", priority: "media", depends_on: [1] },
-  ],
-};
-
-function taskListResponse() {
-  return { content: [{ type: "tool_use", id: "toolu_1", name: "salvar_plano", input: TASK_LIST }] };
-}
-
-function taskPromptResponse(text: string) {
-  return { content: [{ type: "text", text }] };
-}
+const { generateTaskPrompt, shortenTaskPrompt, PlanTaskPromptError } = await import("@/lib/ai/plan");
 
 afterEach(() => {
   vi.unstubAllEnvs();
   create.mockReset();
 });
 
-describe("generatePlanContent (duas etapas)", () => {
-  it("gera a lista de tarefas numa chamada e o prompt_md de cada tarefa em chamadas separadas", async () => {
+const BASE_PARAMS = {
+  companyContext: "",
+  hasProject: false,
+  skeletonBlock: "1. Tarefa 1\n2. Tarefa 2",
+  task: { title: "Tarefa 1", description: "desc", acceptance: "aceite" },
+};
+
+function textResponse(text: string) {
+  return { content: [{ type: "text", text }] };
+}
+
+describe("generateTaskPrompt (etapa 2 do plano)", () => {
+  it("manda o contexto estável (empresa/ata/parecer/esqueleto) com cache_control, e a tarefa fora dele", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
     vi.stubEnv("MOCK_AI", "0");
-    create.mockResolvedValueOnce(taskListResponse());
-    create.mockResolvedValueOnce(taskPromptResponse("Prompt da tarefa 1."));
-    create.mockResolvedValueOnce(taskPromptResponse("Prompt da tarefa 2."));
+    create.mockResolvedValueOnce(textResponse("Prompt gerado."));
 
-    const content = await generatePlanContent(BASE_PARAMS);
+    const text = await generateTaskPrompt(BASE_PARAMS);
 
-    // 1 chamada pra lista + 1 por tarefa = 3 no total.
-    expect(create).toHaveBeenCalledTimes(3);
-    expect(content.tasks).toHaveLength(2);
-    expect(content.tasks[0].prompt_md).toBe("Prompt da tarefa 1.");
-    expect(content.tasks[1].prompt_md).toBe("Prompt da tarefa 2.");
+    expect(text).toBe("Prompt gerado.");
+    const call = create.mock.calls[0][0];
+    expect(Array.isArray(call.system)).toBe(true);
+    expect(call.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(call.system[0].text).toContain("Tarefa 1\n2. Tarefa 2");
+    expect(call.messages[0].content).toContain("Tarefa 1");
+    expect(call.messages[0].content).not.toContain("1. Tarefa 1\n2. Tarefa 2");
   });
 
-  it("a chamada da lista usa ferramenta (tool_use); a do prompt de cada tarefa é texto livre", async () => {
+  it("lança PlanTaskPromptError se o Claude responder vazio", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
     vi.stubEnv("MOCK_AI", "0");
-    create.mockResolvedValueOnce(taskListResponse());
-    create.mockResolvedValueOnce(taskPromptResponse("Prompt 1."));
-    create.mockResolvedValueOnce(taskPromptResponse("Prompt 2."));
+    create.mockResolvedValueOnce(textResponse(""));
 
-    await generatePlanContent(BASE_PARAMS);
+    await expect(generateTaskPrompt(BASE_PARAMS)).rejects.toThrow(PlanTaskPromptError);
+  });
+});
 
-    const [listCall, promptCall1, promptCall2] = create.mock.calls.map((call) => call[0]);
-    expect(listCall.tools).toBeDefined();
-    expect(promptCall1.tools).toBeUndefined();
-    expect(promptCall2.tools).toBeUndefined();
+describe("shortenTaskPrompt", () => {
+  it("devolve o texto encurtado pelo Claude", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
+    vi.stubEnv("MOCK_AI", "0");
+    create.mockResolvedValueOnce(textResponse("Versão encurtada."));
+
+    const text = await shortenTaskPrompt("texto original bem grande", 100);
+    expect(text).toBe("Versão encurtada.");
   });
 
-  it("se o prompt de UMA tarefa falhar, usa um prompt de reserva em vez de derrubar o plano inteiro", async () => {
+  it("cai no texto original se o Claude responder vazio", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
     vi.stubEnv("MOCK_AI", "0");
-    create.mockResolvedValueOnce(taskListResponse());
-    create.mockRejectedValueOnce(new Error("falha simulada só nesta tarefa"));
-    create.mockResolvedValueOnce(taskPromptResponse("Prompt da tarefa 2, gerado normalmente."));
+    create.mockResolvedValueOnce(textResponse(""));
 
-    const content = await generatePlanContent(BASE_PARAMS);
-
-    expect(content.tasks).toHaveLength(2);
-    expect(content.tasks[0].prompt_md).toContain("Não foi possível gerar automaticamente");
-    expect(content.tasks[0].prompt_md).toContain("desc 1");
-    expect(content.tasks[1].prompt_md).toBe("Prompt da tarefa 2, gerado normalmente.");
+    const text = await shortenTaskPrompt("texto original", 100);
+    expect(text).toBe("texto original");
   });
 });

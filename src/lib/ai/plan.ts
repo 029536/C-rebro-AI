@@ -1,18 +1,27 @@
-import { planContentSchema, planTaskListSchema, type PlanContent, type PlanTaskStub } from "@/lib/plans/schema";
-import { mapWithConcurrencyLimit } from "@/lib/concurrency";
-import { PLAN_TASK_PROMPT_CONCURRENCY_LIMIT } from "@/lib/config";
+import type { PlanTaskStub } from "@/lib/plans/schema";
+import { planTaskListSchema } from "@/lib/plans/schema";
 import { extractText, getAnthropicClient } from "./anthropic";
-import { ExpectedAIError, redactSecrets, summarizeZodIssues } from "./env";
-import { PLAN_INPUT_SCHEMA, PLAN_TOOL_NAME, planSystemPrompt, planTaskPromptSystemPrompt } from "./prompts";
+import { ExpectedAIError, summarizeZodIssues } from "./env";
+import {
+  PLAN_INPUT_SCHEMA,
+  PLAN_TOOL_NAME,
+  planShortenPromptSystemPrompt,
+  planSystemPrompt,
+  planTaskPromptSystemPrompt,
+  planTaskPromptUserMessage,
+} from "./prompts";
 import { callStructuredTool } from "./structuredTool";
 
 const TASK_LIST_MAX_TOKENS = 4_000;
 const TASK_PROMPT_MAX_TOKENS = 3_000;
+const SHORTEN_PROMPT_MAX_TOKENS = 3_000;
 
-/** O Claude respondeu, mas não no formato esperado — não é falta de chave nem erro de rede. */
+/** O Claude não devolveu a lista de tarefas (etapa 1) num formato válido. */
 export class PlanGenerationError extends ExpectedAIError {}
+/** Falhou ao gerar o prompt_md de UMA tarefa (etapa 2) — não derruba o plano inteiro, ver lib/plans/multistage.ts. */
+export class PlanTaskPromptError extends ExpectedAIError {}
 
-const MOCK_CONTENT: PlanContent = {
+const MOCK_TASK_LIST: { summary: string; tasks: PlanTaskStub[] } = {
   summary: "Plano simulado (MOCK_AI=1): duas tarefas, a segunda depende da primeira.",
   tasks: [
     {
@@ -21,8 +30,6 @@ const MOCK_CONTENT: PlanContent = {
       acceptance: "Documento curto com o fluxo atual, revisado pela equipe.",
       priority: "alta",
       depends_on: [],
-      prompt_md:
-        "# Prompt simulado (MOCK_AI=1)\n\nMapeie o fluxo atual do processo discutido na reunião. Confirme seu entendimento e liste dúvidas antes de codar. Rode lint, typecheck e testes ao final.",
     },
     {
       title: "Construir a primeira versão",
@@ -30,8 +37,6 @@ const MOCK_CONTENT: PlanContent = {
       acceptance: "Versão mínima funcionando, com testes passando.",
       priority: "media",
       depends_on: [1],
-      prompt_md:
-        "# Prompt simulado (MOCK_AI=1)\n\nImplemente a versão mínima combinada. Confirme seu entendimento e liste dúvidas antes de codar. Rode lint, typecheck e testes ao final.",
     },
   ],
 };
@@ -46,15 +51,23 @@ export type PlanContextParams = {
   hasProject: boolean;
 };
 
-/** Etapa 1: só a lista de tarefas (sem prompt_md) — saída bem menor, longe do teto de tokens. */
-async function generatePlanTaskList(
-  params: PlanContextParams & { transcript: string }
+/**
+ * Etapa 1: só a lista de tarefas (sem `prompt_md`) — a partir da ata
+ * consolidada, do parecer e do contexto do projeto, nunca da transcrição
+ * crua (CLAUDE.md).
+ */
+export async function generatePlanTaskList(
+  params: PlanContextParams
 ): Promise<{ summary: string; tasks: PlanTaskStub[] }> {
+  if (process.env.MOCK_AI === "1") {
+    return MOCK_TASK_LIST;
+  }
+
   const input = await callStructuredTool({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
     maxTokens: TASK_LIST_MAX_TOKENS,
     system: planSystemPrompt(params),
-    messages: [{ role: "user", content: `<transcricao>\n${params.transcript}\n</transcricao>` }],
+    messages: [{ role: "user", content: "Gere a lista de tarefas do plano, de acordo com as instruções acima." }],
     toolName: PLAN_TOOL_NAME,
     toolDescription: "Salva a lista de tarefas do plano de execução da reunião.",
     inputSchema: PLAN_INPUT_SCHEMA,
@@ -70,62 +83,66 @@ async function generatePlanTaskList(
   return parsed.data;
 }
 
-const FALLBACK_PROMPT_SUFFIX =
+const MOCK_PROMPT_SUFFIX =
   "Confirme seu entendimento e liste dúvidas antes de codar. Rode lint, typecheck e testes ao final.";
 
-function fallbackTaskPrompt(task: PlanTaskStub): string {
-  return `# ${task.title}\n\nNão foi possível gerar automaticamente o prompt completo desta tarefa — use isto como ponto de partida.\n\n**Objetivo:** ${task.description}\n\n**Critério de aceite:** ${task.acceptance}\n\n${FALLBACK_PROMPT_SUFFIX}`;
+/**
+ * Etapa 2: o `prompt_md` de UMA tarefa, texto livre. O prefixo (empresa,
+ * reunião, ata, parecer, projeto e o esqueleto inteiro do plano) é IDÊNTICO
+ * nas N chamadas em paralelo de uma mesma geração, por isso vai com
+ * `cache_control: ephemeral` — só a tarefa específica desta chamada muda, na
+ * mensagem do usuário. Lança em caso de falha: cada tarefa é salva e
+ * retomada isoladamente por lib/plans/multistage.ts, sem cair num prompt de
+ * reserva silencioso.
+ */
+export async function generateTaskPrompt(
+  params: PlanContextParams & {
+    task: { title: string; description: string; acceptance: string };
+    skeletonBlock: string;
+  }
+): Promise<string> {
+  if (process.env.MOCK_AI === "1") {
+    return `# Prompt simulado (MOCK_AI=1) — ${params.task.title}\n\n${params.task.description}\n\n${MOCK_PROMPT_SUFFIX}`;
+  }
+
+  const message = await getAnthropicClient().messages.create({
+    model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
+    max_tokens: TASK_PROMPT_MAX_TOKENS,
+    system: [
+      {
+        type: "text",
+        text: planTaskPromptSystemPrompt(params),
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [{ role: "user", content: planTaskPromptUserMessage(params.task) }],
+  });
+
+  const text = extractText(message.content).trim();
+  if (!text) {
+    throw new PlanTaskPromptError(`O Claude não devolveu o prompt da tarefa "${params.task.title}".`);
+  }
+  return text;
 }
 
 /**
- * Etapa 2: o `prompt_md` de UMA tarefa, texto livre (não é saída estruturada
- * — só um campo). Nunca lança: uma falha numa tarefa não deve derrubar o
- * plano inteiro, cai num prompt de reserva a partir do que já se sabe dela.
+ * Pede pra encurtar um `prompt_md` que passou do limite de caracteres do
+ * esquema — em vez de reprovar a tarefa inteira (CLAUDE.md). Texto livre,
+ * sem ferramenta; nunca lança, cai no próprio texto original se a chamada
+ * falhar (o chamador trunca como último recurso).
  */
-async function generateTaskPrompt(params: PlanContextParams & { task: PlanTaskStub }): Promise<string> {
-  try {
-    const message = await getAnthropicClient().messages.create({
-      model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
-      max_tokens: TASK_PROMPT_MAX_TOKENS,
-      system: planTaskPromptSystemPrompt(params),
-      messages: [
-        {
-          role: "user",
-          content: `<tarefa>\nTítulo: ${params.task.title}\nDescrição: ${params.task.description}\nCritério de aceite: ${params.task.acceptance}\n</tarefa>`,
-        },
-      ],
-    });
-    const text = extractText(message.content).trim();
-    if (text) return text;
-  } catch (error) {
-    console.error(
-      `generateTaskPrompt ("${params.task.title}") falhou, usando prompt de reserva:`,
-      redactSecrets(error instanceof Error ? error.message : String(error))
-    );
-  }
-  return fallbackTaskPrompt(params.task);
-}
-
-export async function generatePlanContent(
-  params: PlanContextParams & { transcript: string }
-): Promise<PlanContent> {
+export async function shortenTaskPrompt(promptMd: string, maxChars: number): Promise<string> {
   if (process.env.MOCK_AI === "1") {
-    return MOCK_CONTENT;
+    return promptMd.slice(0, maxChars);
   }
 
-  const taskList = await generatePlanTaskList(params);
-
-  const tasks = await mapWithConcurrencyLimit(taskList.tasks, PLAN_TASK_PROMPT_CONCURRENCY_LIMIT, async (stub) => {
-    const prompt_md = await generateTaskPrompt({ ...params, task: stub });
-    return { ...stub, prompt_md };
+  const message = await getAnthropicClient().messages.create({
+    model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
+    max_tokens: SHORTEN_PROMPT_MAX_TOKENS,
+    system: planShortenPromptSystemPrompt(maxChars),
+    messages: [{ role: "user", content: promptMd }],
   });
 
-  const parsed = planContentSchema.safeParse({ summary: taskList.summary, tasks });
-  if (!parsed.success) {
-    throw new PlanGenerationError(
-      "O Claude não devolveu o plano num formato válido.",
-      summarizeZodIssues(parsed.error)
-    );
-  }
-  return parsed.data;
+  const text = extractText(message.content).trim();
+  return text || promptMd;
 }

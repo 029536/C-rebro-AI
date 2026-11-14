@@ -5,7 +5,10 @@ import { commitPlan, fetchLatestDoneTasks, generateMeetingPlan } from "@/lib/pla
 import { updateProjectMemoryAfterMeeting } from "@/lib/projects/memory";
 import { createClient } from "@/lib/supabase/server";
 
-export const maxDuration = 120;
+// Etapa 1 (lista) + etapa 2 (N prompts em paralelo, com limite de
+// concorrência) pode passar de 120s numa reunião com plano denso — mesmo
+// teto usado pela ata map-reduce.
+export const maxDuration = 280;
 
 const confirmSchema = z.object({
   confirm: z.literal(true),

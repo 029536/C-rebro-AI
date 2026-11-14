@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generatePlanContent } from "@/lib/ai/plan";
+import { generatePlanTaskList } from "@/lib/ai/plan";
 import { AnthropicKeyMissingError } from "@/lib/ai/anthropic";
-import { planContentSchema } from "@/lib/plans/schema";
+import { planTaskListSchema } from "@/lib/plans/schema";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -10,20 +10,21 @@ afterEach(() => {
 const BASE_PARAMS = {
   companyContext: "",
   hasProject: false,
-  transcript: "algo foi dito sobre o projeto",
+  ataFormal: "Texto da ata.",
+  reviewSummary: "Diagnóstico: ok.",
 };
 
-describe("generatePlanContent", () => {
-  it("com MOCK_AI=1 nunca toca no cliente da Anthropic e devolve um plano válido", async () => {
+describe("generatePlanTaskList", () => {
+  it("com MOCK_AI=1 nunca toca no cliente da Anthropic e devolve uma lista válida", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("MOCK_AI", "1");
-    const content = await generatePlanContent(BASE_PARAMS);
-    expect(planContentSchema.safeParse(content).success).toBe(true);
+    const content = await generatePlanTaskList(BASE_PARAMS);
+    expect(planTaskListSchema.safeParse(content).success).toBe(true);
   });
 
   it("sem MOCK_AI e sem chave, propaga AnthropicKeyMissingError para o chamador tratar", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("MOCK_AI", "0");
-    await expect(generatePlanContent(BASE_PARAMS)).rejects.toThrow(AnthropicKeyMissingError);
+    await expect(generatePlanTaskList(BASE_PARAMS)).rejects.toThrow(AnthropicKeyMissingError);
   });
 });

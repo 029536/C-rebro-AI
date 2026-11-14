@@ -3,11 +3,9 @@ import {
   describeAnthropicErrorDetail,
   statusForAnthropicError,
 } from "@/lib/ai/anthropic";
-import { buildContext } from "@/lib/ai/context";
 import { redactSecrets } from "@/lib/ai/env";
-import { generatePlanContent } from "@/lib/ai/plan";
 import { buildMeetingContextBlock, combineCompanyContext } from "@/lib/ai/prompts";
-import { isTranscriptTooSparse } from "@/lib/minutes/rules";
+import { generatePlanDraftAuto } from "@/lib/plans/multistage";
 import { minutesDocumentSchema } from "@/lib/minutes/schema";
 import { participantsSchema } from "@/lib/participants";
 import { type PlanTask, planContentSchema } from "@/lib/plans/schema";
@@ -116,20 +114,7 @@ export async function generateMeetingPlan(
     };
   }
 
-  const [
-    { data: chunks },
-    { data: checkpoints },
-    { data: companyContext },
-    { data: minutesRow },
-    { data: reviewRow },
-    doneTasks,
-  ] = await Promise.all([
-    supabase
-      .from("meeting_chunks")
-      .select("idx, part_no, transcript")
-      .eq("meeting_id", meetingId)
-      .order("idx", { ascending: true }),
-    supabase.from("meeting_checkpoints").select("part_no, summary").eq("meeting_id", meetingId),
+  const [{ data: companyContext }, { data: minutesRow }, { data: reviewRow }, doneTasks] = await Promise.all([
     supabase.from("company_context").select("context, vocabulary").maybeSingle(),
     supabase
       .from("meeting_minutes")
@@ -148,35 +133,16 @@ export async function generateMeetingPlan(
     fetchLatestDoneTasks(supabase, meetingId),
   ]);
 
-  const allChunks = chunks ?? [];
-  if (allChunks.length === 0) {
-    return { ok: false, status: 409, error: "Essa reunião ainda não tem transcrição.", errorDetail: null };
-  }
-
-  const fullTranscript = allChunks
-    .map((chunk) => chunk.transcript.trim())
-    .filter(Boolean)
-    .join(" ");
-  if (isTranscriptTooSparse(fullTranscript)) {
+  const ataParsed = minutesRow?.status === "ready" ? minutesDocumentSchema.safeParse(minutesRow.content) : null;
+  if (!ataParsed?.success) {
     return {
       ok: false,
-      status: 422,
-      error: "A transcrição está vazia ou não tem conteúdo suficiente para gerar um plano confiável.",
+      status: 409,
+      error: "Gere a ata desta reunião antes de criar o plano de execução.",
       errorDetail: null,
     };
   }
-
-  const built = buildContext({
-    checkpoints: (checkpoints ?? []).map((checkpoint) => ({
-      partNo: checkpoint.part_no,
-      summary: checkpoint.summary,
-    })),
-    chunks: allChunks.map((chunk) => ({ idx: chunk.idx, partNo: chunk.part_no, transcript: chunk.transcript })),
-    currentPartNo: allChunks[allChunks.length - 1].part_no,
-  });
-  const transcript = built.checkpointsBlock
-    ? `<resumos_das_partes_anteriores>\n${built.checkpointsBlock}\n</resumos_das_partes_anteriores>\n\n${built.transcriptBlock}`
-    : built.transcriptBlock;
+  const ataFormal = ataParsed.data.ata_formal;
 
   const participantsParsed = participantsSchema.safeParse(meeting.participants);
   const meetingContext = buildMeetingContextBlock({
@@ -185,10 +151,6 @@ export async function generateMeetingPlan(
     participants: participantsParsed.success ? participantsParsed.data : [],
     context: meeting.context,
   });
-
-  const ataParsed =
-    minutesRow?.status === "ready" ? minutesDocumentSchema.safeParse(minutesRow.content) : null;
-  const ataFormal = ataParsed?.success ? ataParsed.data.ata_formal : null;
 
   const reviewParsed =
     reviewRow?.status === "ready" ? reviewContentSchema.safeParse(reviewRow.content) : null;
@@ -201,12 +163,13 @@ export async function generateMeetingPlan(
       ? doneTasks.map((task) => `- ${task.title}: ${task.description}`).join("\n")
       : null;
 
+  const recentText = [ataFormal, reviewSummary].filter(Boolean).join("\n\n");
   const projectContext = meeting.project_id
-    ? await buildProjectContextBlock(supabase, meeting.project_id, transcript)
+    ? await buildProjectContextBlock(supabase, meeting.project_id, recentText)
     : null;
 
   try {
-    const content = await generatePlanContent({
+    const content = await generatePlanDraftAuto(supabase, meetingId, {
       companyContext: combineCompanyContext(companyContext),
       meetingContext: meetingContext || undefined,
       ataFormal,
@@ -214,7 +177,6 @@ export async function generateMeetingPlan(
       doneTasksBlock,
       projectContext,
       hasProject: Boolean(meeting.project_id),
-      transcript,
     });
 
     const parsed = planContentSchema.safeParse(content);

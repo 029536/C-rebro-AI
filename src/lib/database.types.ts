@@ -1,7 +1,7 @@
 // Gerado à mão a partir das migrações 0001, 0002, 0005, 0006, 0007, 0008, 0009, 0010, 0011,
-// 0012, 0013, 0014, 0015, 0016, 0017, 0018, 0019, 0020 e 0021 (sem acesso a Docker/Supabase
-// CLI local neste ambiente). Depois que o projeto Supabase existir e as migrações forem
-// aplicadas, regenere com:
+// 0012, 0013, 0014, 0015, 0016, 0017, 0018, 0019, 0020, 0021 e 0022 (sem acesso a Docker/
+// Supabase CLI local neste ambiente). Depois que o projeto Supabase existir e as migrações
+// forem aplicadas, regenere com:
 //   npx supabase gen types typescript --project-id <ref> --schema public > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -625,6 +625,87 @@ export type Database = {
           {
             foreignKeyName: "project_memory_items_origem_meeting_id_fkey";
             columns: ["origem_meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      dev_plan_drafts: {
+        Row: {
+          id: string;
+          meeting_id: string;
+          status: "generating" | "ready" | "error";
+          summary: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          meeting_id: string;
+          status?: "generating" | "ready" | "error";
+          summary?: string | null;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["dev_plan_drafts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "dev_plan_drafts_meeting_id_fkey";
+            columns: ["meeting_id"];
+            isOneToOne: false;
+            referencedRelation: "meetings";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      dev_plan_task_drafts: {
+        Row: {
+          id: string;
+          draft_id: string;
+          meeting_id: string;
+          position: number;
+          title: string;
+          description: string;
+          acceptance: string;
+          priority: "alta" | "media" | "baixa";
+          depends_on: number[];
+          status: "pending" | "generating" | "ready" | "error";
+          prompt_md: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          draft_id: string;
+          meeting_id: string;
+          position: number;
+          title: string;
+          description?: string;
+          acceptance?: string;
+          priority?: "alta" | "media" | "baixa";
+          depends_on?: number[];
+          status?: "pending" | "generating" | "ready" | "error";
+          prompt_md?: string | null;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["dev_plan_task_drafts"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "dev_plan_task_drafts_draft_id_fkey";
+            columns: ["draft_id"];
+            isOneToOne: false;
+            referencedRelation: "dev_plan_drafts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "dev_plan_task_drafts_meeting_id_fkey";
+            columns: ["meeting_id"];
             isOneToOne: false;
             referencedRelation: "meetings";
             referencedColumns: ["id"];
