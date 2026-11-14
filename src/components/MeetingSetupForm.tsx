@@ -93,7 +93,9 @@ export function MeetingSetupForm({
   }, [showPreviousMeetings]);
 
   useEffect(() => {
-    if (!showPreviousMeetings) return;
+    // Diferente de "reuniões anteriores" (só na criação), o projeto pode ser
+    // escolhido ou trocado tanto ao criar quanto ao editar uma reunião já
+    // existente — por isso esta busca não depende de `showPreviousMeetings`.
     let cancelled = false;
     fetch("/api/projects")
       .then((response) => (response.ok ? response.json() : Promise.reject()))
@@ -106,7 +108,7 @@ export function MeetingSetupForm({
     return () => {
       cancelled = true;
     };
-  }, [showPreviousMeetings]);
+  }, []);
 
   function togglePreviousMeeting(id: string) {
     setSelectedPreviousIds((prev) =>
@@ -344,29 +346,27 @@ export function MeetingSetupForm({
         </div>
       )}
 
-      {showPreviousMeetings && (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="project" className="text-sm font-medium text-text">
-            Projeto de código (opcional)
-          </label>
-          <select
-            id="project"
-            value={value.project_id ?? ""}
-            onChange={(event) => updateField("project_id", event.target.value || null)}
-            disabled={projects.length === 0}
-            className="h-12 rounded-lg border border-border bg-surface px-3 text-base text-text disabled:text-text-secondary"
-          >
-            <option value="">
-              {projects.length === 0 ? "Nenhum projeto importado ainda" : "Nenhum"}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="project" className="text-sm font-medium text-text">
+          Projeto de código (opcional)
+        </label>
+        <select
+          id="project"
+          value={value.project_id ?? ""}
+          onChange={(event) => updateField("project_id", event.target.value || null)}
+          disabled={projects.length === 0}
+          className="h-12 rounded-lg border border-border bg-surface px-3 text-base text-text disabled:text-text-secondary"
+        >
+          <option value="">
+            {projects.length === 0 ? "Nenhum projeto importado ainda" : "Nenhum"}
+          </option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
             </option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+          ))}
+        </select>
+      </div>
 
       <button
         type="submit"
