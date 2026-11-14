@@ -93,8 +93,12 @@ export async function generateMinutesContentAuto(
         .eq("id", row.id);
       row.status = "ready";
     } catch (error) {
-      // Nunca o texto da reunião: só a mensagem segura do erro (ExpectedAIError já garante isso).
-      const message = redactSecrets(error instanceof Error ? error.message : String(error));
+      // Nunca o texto da reunião: só a mensagem segura do erro, com o detalhe
+      // (campo e motivo da validação — nunca o valor) quando existir, para
+      // "2 de 3 partes falharam" não virar a única informação disponível.
+      const baseMessage = error instanceof Error ? error.message : String(error);
+      const detail = error instanceof ExpectedAIError && error.detail ? ` (${error.detail})` : "";
+      const message = redactSecrets(`${baseMessage}${detail}`);
       await supabase.from("meeting_minutes_parts").update({ status: "error", error: message }).eq("id", row.id);
       row.status = "error";
       row.error = message;

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ExpectedAIError } from "@/lib/ai/env";
 
 const generateMinutesPartContent = vi.fn();
 const generatePartQuickSummary = vi.fn();
@@ -183,6 +184,26 @@ describe("generateMinutesContentAuto", () => {
     const rows = getRows();
     expect(rows.some((row) => row.status === "error")).toBe(true);
     expect(rows.some((row) => row.status === "ready")).toBe(true);
+  });
+
+  it("quando a falha tem detalhe (ExpectedAIError), o detalhe fica salvo na parte, não só a mensagem genérica", async () => {
+    generatePartQuickSummary.mockResolvedValue("resumo");
+    generateMinutesPartContent.mockImplementation(async (params: { partNumber: number }) => {
+      if (params.partNumber === 1) {
+        throw new ExpectedAIError(
+          "A parte 1 de 3 da ata não veio num formato válido.",
+          "assuntos_discutidos.0: String must contain at most 500 character(s)"
+        );
+      }
+      return partContent(`parte ${params.partNumber}`);
+    });
+
+    const { supabase, getRows } = makeSupabaseStub();
+    await expect(generateMinutesContentAuto(supabase as never, "minutes-1", "meeting-1", BASE_PARAMS)).rejects.toThrow();
+
+    const failedRow = getRows().find((row) => row.status === "error");
+    expect(failedRow?.error).toContain("não veio num formato válido");
+    expect(failedRow?.error).toContain("assuntos_discutidos.0");
   });
 
   it("'Tentar de novo' (novo minutes_id) herda as partes prontas e só refaz a que falhou", async () => {

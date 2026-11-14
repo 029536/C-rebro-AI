@@ -4,6 +4,7 @@ import {
   type MinutesFinalFields,
   type MinutesPartContent,
 } from "@/lib/minutes/schema";
+import { normalizeMinutesPartContent } from "@/lib/minutes/normalizePartContent";
 import { extractText, getAnthropicClient } from "./anthropic";
 import { ExpectedAIError, summarizeZodIssues } from "./env";
 import {
@@ -80,7 +81,7 @@ export async function generateMinutesPartContent(params: {
     inputSchema: MINUTES_PART_INPUT_SCHEMA,
   });
 
-  const parsed = minutesPartContentSchema.safeParse(input);
+  const parsed = minutesPartContentSchema.safeParse(normalizeMinutesPartContent(input));
   if (!parsed.success) {
     throw new MinutesPartGenerationError(
       `A parte ${params.partNumber} de ${params.totalParts} da ata não veio num formato válido.`,
