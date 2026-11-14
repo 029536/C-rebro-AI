@@ -8,8 +8,18 @@
  * Erro cuja mensagem nós mesmos escrevemos — sempre seguro mostrar ao
  * usuário, ao contrário de um erro vindo do SDK do provedor ou do runtime
  * (fetch, rede), que pode ecoar cabeçalhos, URLs ou outro detalhe sensível.
+ * `detail`, quando presente, é um diagnóstico técnico igualmente seguro
+ * (motivo estrutural — stop_reason, tentativas, limites — nunca o texto da
+ * reunião nem o que o Claude respondeu) para a linha pequena na tela.
  */
-export class ExpectedAIError extends Error {}
+export class ExpectedAIError extends Error {
+  detail?: string;
+
+  constructor(message: string, detail?: string) {
+    super(message);
+    this.detail = detail;
+  }
+}
 
 /**
  * Lê uma variável de ambiente de chave de API: remove espaços e quebras de
@@ -28,6 +38,20 @@ export function readApiKey(
     return { key: null, invalid: true };
   }
   return { key: trimmed, invalid: false };
+}
+
+/**
+ * Resume os problemas de um `z.ZodError` numa linha curta e segura — nome do
+ * campo e a regra que falhou (ex.: "ata_formal: muito grande"), nunca o
+ * valor que o Claude mandou. Usado como `detail` quando a saída estruturada
+ * bate no formato esperado pela Anthropic (tool_use válido) mas não no
+ * nosso próprio esquema — para a tela mostrar qual campo, não só "inválido".
+ */
+export function summarizeZodIssues(error: { issues: { path: PropertyKey[]; message: string }[] }): string {
+  return error.issues
+    .slice(0, 5)
+    .map((issue) => `${issue.path.join(".") || "(raiz)"}: ${issue.message}`)
+    .join("; ");
 }
 
 // Qualquer coisa com essa cara (chave da Anthropic ou da OpenAI) é removida de

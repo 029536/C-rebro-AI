@@ -1,9 +1,16 @@
 import { reviewContentSchema, type ReviewContent } from "@/lib/reviews/schema";
-import { ExpectedAIError } from "./env";
+import { ExpectedAIError, summarizeZodIssues } from "./env";
 import { REVIEW_INPUT_SCHEMA, REVIEW_TOOL_NAME, reviewSystemPrompt } from "./prompts";
 import { callStructuredTool } from "./structuredTool";
 
-const MAX_TOKENS = 4_000;
+const BASE_MAX_TOKENS = 4_000;
+const MAX_TOKENS_CEILING = 12_000;
+const CHARS_PER_EXTRA_TOKEN = 3;
+
+/** Teto de tokens de saída do parecer, maior para transcrições mais longas. Exportado para teste. */
+export function reviewMaxTokens(transcriptLength: number): number {
+  return Math.min(BASE_MAX_TOKENS + Math.floor(transcriptLength / CHARS_PER_EXTRA_TOKEN), MAX_TOKENS_CEILING);
+}
 
 /** O Claude respondeu, mas não no formato esperado — não é falta de chave nem erro de rede. */
 export class ReviewGenerationError extends ExpectedAIError {}
@@ -28,7 +35,7 @@ export async function generateReviewContent(params: {
 
   const input = await callStructuredTool({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
-    maxTokens: MAX_TOKENS,
+    maxTokens: reviewMaxTokens(params.transcript.length),
     system: reviewSystemPrompt({
       companyContext: params.companyContext,
       meetingContext: params.meetingContext,
@@ -43,7 +50,10 @@ export async function generateReviewContent(params: {
 
   const parsed = reviewContentSchema.safeParse(input);
   if (!parsed.success) {
-    throw new ReviewGenerationError("O Claude não devolveu o parecer num formato válido.");
+    throw new ReviewGenerationError(
+      "O Claude não devolveu o parecer num formato válido.",
+      summarizeZodIssues(parsed.error)
+    );
   }
   return parsed.data;
 }

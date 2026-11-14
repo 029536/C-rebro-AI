@@ -24,6 +24,7 @@ export function PlanView({
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [tasks, setTasks] = useState<PlanTaskRow[]>(plan?.tasks ?? []);
   // Reajusta durante a renderização quando `plan` muda (novo plano gerado) — não
   // num efeito, para não disparar um render em cascata (ver react-hooks/set-state-in-effect).
@@ -40,10 +41,12 @@ export function PlanView({
   async function generate() {
     setBusy(true);
     setError(null);
+    setErrorDetail(null);
     const response = await fetch(`/api/meetings/${meetingId}/plan`, { method: "POST" });
     const data = await response.json().catch(() => null);
     if (!response.ok) {
       setError(data?.error ?? "Não foi possível gerar o plano.");
+      setErrorDetail(data?.error_detail ?? null);
       setBusy(false);
       return;
     }
@@ -59,6 +62,7 @@ export function PlanView({
     if (!preview) return;
     setBusy(true);
     setError(null);
+    setErrorDetail(null);
     const response = await fetch(`/api/meetings/${meetingId}/plan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -67,6 +71,7 @@ export function PlanView({
     if (!response.ok) {
       const data = await response.json().catch(() => null);
       setError(data?.error ?? "Não foi possível salvar o plano.");
+      setErrorDetail(data?.error_detail ?? null);
       setBusy(false);
       return;
     }
@@ -120,7 +125,12 @@ export function PlanView({
           ))}
         </div>
 
-        {error && <p className="text-sm text-record">{error}</p>}
+        {error && (
+          <div>
+            <p className="text-sm text-record">{error}</p>
+            {errorDetail && <p className="text-xs text-text-secondary">{errorDetail}</p>}
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button
@@ -149,7 +159,12 @@ export function PlanView({
       <div className="flex flex-col gap-3">
         <p className="text-text-secondary">Esta reunião ainda não tem plano de execução.</p>
         <GenerateButton busy={busy} onClick={generate} label="Gerar plano" />
-        {error && <p className="text-sm text-record">{error}</p>}
+        {error && (
+          <div>
+            <p className="text-sm text-record">{error}</p>
+            {errorDetail && <p className="text-xs text-text-secondary">{errorDetail}</p>}
+          </div>
+        )}
       </div>
     );
   }
@@ -167,7 +182,12 @@ export function PlanView({
         </button>
         <GenerateButton busy={busy} onClick={generate} label="Gerar de novo" />
       </div>
-      {error && <p className="text-sm text-record">{error}</p>}
+      {error && (
+        <div>
+          <p className="text-sm text-record">{error}</p>
+          {errorDetail && <p className="text-xs text-text-secondary">{errorDetail}</p>}
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {tasks.map((task) => (
           <TaskCard

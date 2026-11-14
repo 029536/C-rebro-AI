@@ -21,6 +21,21 @@ function messageWithOnlyText() {
   return { content: [{ type: "text", text: "desculpe, não vou usar a ferramenta" }] };
 }
 
+function messageWithTruncatedToolUse(input: unknown) {
+  return {
+    stop_reason: "max_tokens",
+    content: [{ type: "tool_use", id: "toolu_1", name: "ferramenta", input }],
+  };
+}
+
+function messageWithJsonInText(payload: unknown) {
+  return {
+    content: [
+      { type: "text", text: `Claro! Aqui está:\n\`\`\`json\n${JSON.stringify(payload)}\n\`\`\`\nEspero ter ajudado.` },
+    ],
+  };
+}
+
 const BASE_PARAMS = {
   model: "claude-sonnet-5-5",
   maxTokens: 100,
@@ -85,5 +100,47 @@ describe("callStructuredTool", () => {
 
     const sentParams = create.mock.calls[0][0];
     expect(sentParams.system).toContain("SOMENTE chamando a ferramenta");
+  });
+
+  it("não aceita um tool_use cortado por max_tokens como sucesso — tenta de novo com mais espaço", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
+    create.mockResolvedValueOnce(messageWithTruncatedToolUse({ a: "incompleto" }));
+    create.mockResolvedValueOnce(messageWithToolUse({ a: "completo" }));
+
+    const result = await callStructuredTool(BASE_PARAMS);
+
+    expect(result).toEqual({ a: "completo" });
+    expect(create).toHaveBeenCalledTimes(2);
+    // a segunda tentativa pede mais tokens que a primeira (dobro, até o teto de 4x).
+    expect(create.mock.calls[1][0].max_tokens).toBeGreaterThan(create.mock.calls[0][0].max_tokens);
+  });
+
+  it("nunca escala o max_tokens além de 4x o pedido originalmente", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
+    create.mockResolvedValue(messageWithTruncatedToolUse({ a: "sempre incompleto" }));
+
+    await expect(callStructuredTool(BASE_PARAMS)).rejects.toThrow(StructuredToolError);
+    const maxTokensUsed = create.mock.calls.map((call) => call[0].max_tokens);
+    expect(Math.max(...maxTokensUsed)).toBeLessThanOrEqual(BASE_PARAMS.maxTokens * 4);
+  });
+
+  it("o erro final por max_tokens carrega o motivo real em `detail`, não só a mensagem genérica", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
+    create.mockResolvedValue(messageWithTruncatedToolUse({ a: "sempre incompleto" }));
+
+    await expect(callStructuredTool(BASE_PARAMS)).rejects.toMatchObject({
+      message: expect.stringContaining("limite de tamanho"),
+      detail: expect.stringContaining("stop_reason=max_tokens"),
+    });
+  });
+
+  it("como último recurso, extrai um JSON de dentro de cercas ```json quando não há tool_use", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-chave-de-teste-valida");
+    create.mockResolvedValueOnce(messageWithJsonInText({ a: "veio em texto" }));
+
+    const result = await callStructuredTool(BASE_PARAMS);
+
+    expect(result).toEqual({ a: "veio em texto" });
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });

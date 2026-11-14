@@ -1,9 +1,19 @@
 import { planContentSchema, type PlanContent } from "@/lib/plans/schema";
-import { ExpectedAIError } from "./env";
+import { ExpectedAIError, summarizeZodIssues } from "./env";
 import { PLAN_INPUT_SCHEMA, PLAN_TOOL_NAME, planSystemPrompt } from "./prompts";
 import { callStructuredTool } from "./structuredTool";
 
-const MAX_TOKENS = 6_000;
+const BASE_MAX_TOKENS = 12_000;
+const MAX_TOKENS_CEILING = 32_000;
+// Cada tarefa pode ter um prompt_md de até 8000 caracteres (ver lib/plans/schema.ts);
+// num plano com várias tarefas isso soma rápido, então o teto também cresce com o
+// tamanho da transcrição (reuniões mais longas tendem a gerar mais tarefas).
+const CHARS_PER_EXTRA_TOKEN = 3;
+
+/** Teto de tokens de saída do plano, maior para transcrições mais longas. Exportado para teste. */
+export function planMaxTokens(transcriptLength: number): number {
+  return Math.min(BASE_MAX_TOKENS + Math.floor(transcriptLength / CHARS_PER_EXTRA_TOKEN), MAX_TOKENS_CEILING);
+}
 
 /** O Claude respondeu, mas não no formato esperado — não é falta de chave nem erro de rede. */
 export class PlanGenerationError extends ExpectedAIError {}
@@ -48,7 +58,7 @@ export async function generatePlanContent(params: {
 
   const input = await callStructuredTool({
     model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
-    maxTokens: MAX_TOKENS,
+    maxTokens: planMaxTokens(params.transcript.length),
     system: planSystemPrompt({
       companyContext: params.companyContext,
       meetingContext: params.meetingContext,
@@ -66,7 +76,10 @@ export async function generatePlanContent(params: {
 
   const parsed = planContentSchema.safeParse(input);
   if (!parsed.success) {
-    throw new PlanGenerationError("O Claude não devolveu o plano num formato válido.");
+    throw new PlanGenerationError(
+      "O Claude não devolveu o plano num formato válido.",
+      summarizeZodIssues(parsed.error)
+    );
   }
   return parsed.data;
 }

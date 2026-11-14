@@ -85,12 +85,18 @@ export function describeAnthropicError(error: unknown): string {
 
 /**
  * Detalhe técnico seguro de uma falha, para mostrar em texto pequeno abaixo
- * da mensagem amigável (status HTTP, tipo e id da solicitação — tudo vindo
- * da RESPOSTA da Anthropic, nunca do nosso pedido). Só existe para
- * `APIError`: um erro antes de chegar na API (rede, cabeçalho malformado)
- * pode ecoar o que foi enviado, então nunca tem detalhe exposto — `null`.
+ * da mensagem amigável. Para `APIError`: status HTTP, tipo e id da
+ * solicitação, tudo vindo da RESPOSTA da Anthropic, nunca do nosso pedido.
+ * Para um erro nosso (`ExpectedAIError`) com `detail` preenchido — ex.: por
+ * que uma saída estruturada falhou (stop_reason, tentativas) —, devolve esse
+ * detalhe; nunca é o texto da reunião nem o que o Claude respondeu, só
+ * diagnóstico estrutural. Fora desses dois casos, `null`: um erro antes de
+ * chegar na API (rede, cabeçalho malformado) pode ecoar o que foi enviado.
  */
 export function describeAnthropicErrorDetail(error: unknown): string | null {
+  if (error instanceof ExpectedAIError && error.detail) {
+    return error.detail;
+  }
   if (!(error instanceof APIError)) {
     return null;
   }

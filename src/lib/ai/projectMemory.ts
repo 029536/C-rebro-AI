@@ -1,5 +1,5 @@
 import { memoryChangeSchema, type MemoryChange } from "@/lib/projects/memorySchema";
-import { ExpectedAIError } from "./env";
+import { ExpectedAIError, summarizeZodIssues } from "./env";
 import {
   PROJECT_MEMORY_INPUT_SCHEMA,
   PROJECT_MEMORY_TOOL_NAME,
@@ -48,7 +48,10 @@ export async function generateProjectMemoryChanges(params: {
 
   const parsed = memoryChangeSchema.safeParse(input);
   if (!parsed.success) {
-    throw new ProjectMemoryGenerationError("O Claude não devolveu a atualização da memória num formato válido.");
+    throw new ProjectMemoryGenerationError(
+      "O Claude não devolveu a atualização da memória num formato válido.",
+      summarizeZodIssues(parsed.error)
+    );
   }
   return parsed.data;
 }
