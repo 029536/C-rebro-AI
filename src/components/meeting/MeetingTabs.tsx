@@ -15,10 +15,12 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { ChatBox, type ChatMessage } from "@/components/meeting/ChatBox";
+import { ExportAllButton } from "@/components/meeting/ExportAllSheet";
 import { GenerateMinutesButton } from "@/components/meeting/GenerateMinutesButton";
 import { GenerateReviewButton } from "@/components/meeting/GenerateReviewButton";
 import { MinutesView, type Letterhead } from "@/components/meeting/MinutesView";
 import { PlanView, type PlanState } from "@/components/meeting/PlanView";
+import { ReviewExportBar } from "@/components/meeting/ReviewExportBar";
 import { OpinionCard, type OpinionKind } from "@/components/OpinionCard";
 import { formatDateTime, formatOffset, formatTime } from "@/lib/format";
 import type { MinutesDocument } from "@/lib/minutes/schema";
@@ -114,16 +116,39 @@ export function MeetingTabs({
         })}
       </div>
 
+      <div className="flex justify-end px-4 pt-2">
+        <ExportAllButton
+          meetingTitle={meetingSetup.title}
+          letterhead={letterhead}
+          ata={minutes?.status === "ready" ? minutes.document : null}
+          review={review?.status === "ready" ? review.content : null}
+          plan={plan}
+          chunks={chunks}
+        />
+      </div>
+
       <div className="flex flex-1 flex-col p-4">
         {active === "ata" && (
           <AtaTab meetingId={meetingId} meetingStatus={meetingStatus} minutes={minutes} letterhead={letterhead} />
         )}
 
         {active === "parecer" && (
-          <ParecerTab meetingId={meetingId} meetingStatus={meetingStatus} review={review} />
+          <ParecerTab
+            meetingId={meetingId}
+            meetingStatus={meetingStatus}
+            review={review}
+            meetingTitle={meetingSetup.title}
+            letterhead={letterhead}
+          />
         )}
         {active === "plano" && (
-          <PlanView meetingId={meetingId} meetingStatus={meetingStatus} plan={plan} />
+          <PlanView
+            meetingId={meetingId}
+            meetingStatus={meetingStatus}
+            plan={plan}
+            meetingTitle={meetingSetup.title}
+            letterhead={letterhead}
+          />
         )}
         {active === "chat" && (
           <ChatBox
@@ -145,10 +170,14 @@ function ParecerTab({
   meetingId,
   meetingStatus,
   review,
+  meetingTitle,
+  letterhead,
 }: {
   meetingId: string;
   meetingStatus: string;
   review: ReviewState | null;
+  meetingTitle: string;
+  letterhead: Letterhead;
 }) {
   if (meetingStatus === "recording") {
     return (
@@ -188,7 +217,8 @@ function ParecerTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <ReviewExportBar content={content} meetingTitle={meetingTitle} letterhead={letterhead} />
         <GenerateReviewButton meetingId={meetingId} label="Gerar de novo" />
       </div>
       <ReviewSectionCard title="Meu diagnóstico" icon={Stethoscope} body={content.diagnostico} />

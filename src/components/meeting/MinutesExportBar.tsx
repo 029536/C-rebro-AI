@@ -2,8 +2,12 @@
 
 import { Check, Clipboard, Loader2, Printer, Share2 } from "lucide-react";
 import { useState } from "react";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { buildMinutesDocxBlob, safeFilename } from "@/lib/minutes/docx";
 import { buildMinutesExportHtml } from "@/lib/minutes/export";
+import { buildAtaPdfBlocks } from "@/lib/pdf/blocks";
+import { buildExportFilename } from "@/lib/pdf/filename";
+import { renderPdfDocuments } from "@/lib/pdf/writer";
 import type { MinutesDocument } from "@/lib/minutes/schema";
 
 /** Barra de ações da ata: imprimir/PDF, exportar DOCX (OOXML real), copiar texto, compartilhar. */
@@ -86,6 +90,11 @@ export function MinutesExportBar({
           {exportingDocx && <Loader2 size={14} className="animate-spin" />}
           Exportar DOCX
         </button>
+        <PdfDownloadButton
+          filename={buildExportFilename("Ata", titulo, "pdf")}
+          shareTitle={titulo}
+          buildPdf={() => renderPdfDocuments([buildAtaPdfBlocks(minutesDocument)], letterhead)}
+        />
         <button
           type="button"
           onClick={copyText}

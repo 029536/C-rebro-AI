@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { TaskCard, type PlanTaskRow } from "@/components/meeting/TaskCard";
+import { buildPlanPdfBlocks } from "@/lib/pdf/blocks";
+import { buildExportFilename } from "@/lib/pdf/filename";
+import { renderPdfDocuments, type PdfLetterhead } from "@/lib/pdf/writer";
 
 export type PlanState = { summary: string; tasks: PlanTaskRow[] } | null;
 
@@ -15,10 +19,14 @@ export function PlanView({
   meetingId,
   meetingStatus,
   plan,
+  meetingTitle,
+  letterhead,
 }: {
   meetingId: string;
   meetingStatus: string;
   plan: PlanState;
+  meetingTitle: string;
+  letterhead: PdfLetterhead;
 }) {
   const router = useRouter();
   const [preview, setPreview] = useState<PreviewState | null>(null);
@@ -180,6 +188,12 @@ export function PlanView({
         >
           Copiar todos
         </button>
+        <PdfDownloadButton
+          label="Baixar PDF"
+          filename={buildExportFilename("Plano", meetingTitle, "pdf")}
+          shareTitle={`Plano de execução — ${meetingTitle}`}
+          buildPdf={() => renderPdfDocuments([buildPlanPdfBlocks(plan, meetingTitle)], letterhead)}
+        />
         <GenerateButton busy={busy} onClick={generate} label="Gerar de novo" />
       </div>
       {error && (
